@@ -1,0 +1,25 @@
+.app {
+  width: 420px;
+  max-width: 100vw;
+  height: 600px;
+  max-height: 100dvh;
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--background);
+
+  &__main {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    flex-direction: column;
+    gap: 18px;
+    padding: 8px 22px 0;
+    overflow: auto;
+  }
+}
+
+@media (max-width: 360px) {
+  .app__main { padding-inline: 16px; }
+}

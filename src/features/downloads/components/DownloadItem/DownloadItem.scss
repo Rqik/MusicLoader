@@ -1,0 +1,24 @@
+.download-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 6px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+
+  &:last-child { border-bottom: 0; }
+  &__artwork { flex-shrink: 0; width: 40px; height: 40px; border-radius: 7px; }
+  &__body { flex: 1; min-width: 0; }
+  &__title { margin: 0; color: var(--foreground); font-size: 12px; font-weight: 550; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  &__details { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 4px; }
+  &__artist { margin: 0; min-width: 0; color: var(--muted-foreground); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  &__status { display: flex; flex-shrink: 0; align-items: center; gap: 3px; color: var(--muted-foreground); font-size: 9px; font-variant-numeric: tabular-nums; }
+  &__progress { height: 3px; margin-top: 6px; background: var(--muted); }
+  &__actions { display: flex; align-items: center; gap: 0; }
+  &__remove { width: 26px; height: 28px; color: var(--muted-foreground); }
+  &__retry { width: 26px; height: 28px; color: var(--warning); }
+  &__spinner { animation: download-spin 1.5s linear infinite; }
+  &--completed &__status, &--downloading &__status { color: var(--success); }
+  &--error &__status { color: var(--destructive); }
+}
+
+@keyframes download-spin { to { transform: rotate(360deg); } }

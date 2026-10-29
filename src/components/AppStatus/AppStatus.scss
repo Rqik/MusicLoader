@@ -1,0 +1,15 @@
+.app-status {
+  flex-shrink: 0;
+  padding: 10px 22px;
+  border-top: 1px solid var(--border);
+  background: var(--background);
+
+  &__row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  &__connection { display: flex; align-items: center; gap: 5px; color: var(--muted-foreground); font-size: 9px; }
+  &__dot { width: 5px; height: 5px; flex-shrink: 0; border-radius: 50%; background: var(--muted-foreground); }
+  &__connection--connected &__dot { background: var(--primary); }
+  &__connection--error { color: var(--destructive); }
+  &__connection--error &__dot { background: var(--destructive); }
+  &__demo { display: flex; align-items: center; gap: 4px; color: var(--warning); font-size: 9px; }
+  &__note { margin: 6px 0 0; color: var(--muted-foreground); font-size: 8px; letter-spacing: 0.15px; }
+}

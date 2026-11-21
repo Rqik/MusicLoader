@@ -37,6 +37,13 @@
   --popup-width: 420px;
   --popup-height: 560px;
   --popup-gutter: 20px;
+  --control-size: 44px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
   --radius: 10px;
   --background: #141615;
   --foreground: #eef0ed;
@@ -79,6 +86,24 @@
   :focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
   ::selection { background: var(--primary); color: var(--primary-foreground); }
   * { scrollbar-width: thin; scrollbar-color: var(--input) transparent; }
+}
+
+[data-slot="button"], [role="tab"] {
+  min-height: var(--control-size);
+}
+
+[data-slot="button"][data-size^="icon"] {
+  min-width: var(--control-size);
+}
+
+[data-slot="button"][aria-disabled="true"] {
+  opacity: 0.6;
+  cursor: default;
+}
+
+:is([data-slot="button"], [role="tab"]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {

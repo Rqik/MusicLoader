@@ -15,5 +15,5 @@
   &__status { color: var(--muted-foreground); font-size: 12px; line-height: 16px; }
   &__progress { height: 4px; margin-top: 4px; background: var(--muted); }
   &__actions { display: flex; align-items: center; color: var(--muted-foreground); }
-  &--error &__status { color: var(--destructive); }
+  &[data-status="error"] &__status { color: var(--destructive); }
 }

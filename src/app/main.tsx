@@ -3,7 +3,9 @@ import { createRoot } from 'react-dom/client';
 import '@/styles/globals.css';
 import { App } from './App';
 
-document.documentElement.dataset.surface = window.location.protocol === 'chrome-extension:' ? 'popup' : 'preview';
+const isExtensionPage = window.location.protocol === 'chrome-extension:';
+const isActionPopup = isExtensionPage && chrome.extension.getViews({ type: 'popup' }).includes(window);
+document.documentElement.dataset.surface = isActionPopup ? 'popup' : isExtensionPage ? 'tab' : 'preview';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Не найден корневой элемент popup.');

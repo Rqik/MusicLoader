@@ -1,13 +1,15 @@
 .download-list {
   flex-shrink: 0;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
 
   &__heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
   &__title { margin: 0; font-size: 14px; font-weight: 600; line-height: 20px; }
   &__actions { display: flex; gap: 4px; }
   &__action { color: var(--muted-foreground); }
   &__tabs { gap: 4px; }
-  &__filters { width: 100%; padding: 4px; border-radius: 8px; }
-  &__filter { height: 28px; gap: 4px; padding: 0 8px; border-radius: 4px; font-size: 12px; color: var(--muted-foreground); }
+  &__filters { width: 100%; height: auto; padding: var(--space-1); border-radius: 8px; }
+  &__filter { gap: var(--space-1); padding-inline: var(--space-2); border-radius: 4px; font-size: 12px; color: var(--muted-foreground); }
   &__filter[data-state="active"] { background: var(--secondary); color: var(--foreground); box-shadow: none; }
   &__filter-count { color: var(--muted-foreground); }
   &__content { min-width: 0; }

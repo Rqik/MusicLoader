@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createCipheriv } from 'node:crypto';
 import { createServer } from 'node:http';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, expect } from '@playwright/test';
@@ -13,32 +13,34 @@ const artifactsPath = path.join(projectRoot, 'artifacts');
 await mkdir(artifactsPath, { recursive: true });
 
 const recordingFixtureTitle = 'MusicLoader Own Audio Recording Fixture';
-const context = await chromium.launchPersistentContext('', {
-  channel: process.env.MUSICLOADER_BROWSER_CHANNEL ?? 'chromium',
-  headless: true,
-  viewport: null,
-  // Playwright's headless mute also silences the captured test tab.
-  ignoreDefaultArgs: ['--disable-extensions', '--mute-audio'],
-  args: ['--enable-unsafe-extension-debugging', `--auto-select-tab-capture-source-by-title=${recordingFixtureTitle}`],
-});
+const profilePath = await mkdtemp(path.join(artifactsPath, 'browser-profile-'));
 
 const errors = [];
 const expectedHttpFailures = new Map();
 let downloadCount = 0;
 let expectedDownloadCount = 0;
-context.on('page', (page) => {
-  page.on('pageerror', (error) => errors.push(error.message));
-  page.on('console', (message) => {
-    if (message.type() !== 'error') return;
-    const status = expectedHttpFailures.get(message.location().url);
-    if (status && message.text().startsWith(`Failed to load resource: the server responded with a status of ${status}`)) return;
-    errors.push(message.text());
-  });
-  page.on('download', () => { downloadCount += 1; });
-});
 
+let context;
 let server;
 try {
+  context = await chromium.launchPersistentContext(profilePath, {
+    channel: process.env.MUSICLOADER_BROWSER_CHANNEL ?? 'chromium',
+    headless: true,
+    viewport: null,
+    // Playwright's headless mute also silences the captured test tab.
+    ignoreDefaultArgs: ['--disable-extensions', '--mute-audio'],
+    args: ['--enable-unsafe-extension-debugging', `--auto-select-tab-capture-source-by-title=${recordingFixtureTitle}`],
+  });
+  context.on('page', (page) => {
+    page.on('pageerror', (error) => errors.push(error.message));
+    page.on('console', (message) => {
+      if (message.type() !== 'error') return;
+      const status = expectedHttpFailures.get(message.location().url);
+      if (status && message.text().startsWith(`Failed to load resource: the server responded with a status of ${status}`)) return;
+      errors.push(message.text());
+    });
+    page.on('download', () => { downloadCount += 1; });
+  });
   // Browser-level CDP поддерживает также branded Chrome, где --load-extension отключён.
   const session = await context.browser().newBrowserCDPSession();
   const { id: extensionId } = await session.send('Extensions.loadUnpacked', { path: extensionPath });
@@ -77,7 +79,7 @@ try {
   await expect.poll(async () => {
     const result = await sendNativeCommand('Runtime.evaluate', {
       // Chrome ограничивает высоту экраном и может добавить место под системную полосу прокрутки.
-      expression: '(()=>{const app=document.querySelector(".app")?.getBoundingClientRect();return {isValidWidth:innerWidth>=420&&innerWidth<=440,isValidHeight:innerHeight>=420&&innerHeight<=600,isContentVisible:app?.width===420&&app.left>=0&&app.right<=innerWidth,isFooterVisible:(document.querySelector(".app-status")?.getBoundingClientRect().bottom??Infinity)<=innerHeight}})()',
+      expression: '(()=>{const app=document.querySelector("#root > div")?.getBoundingClientRect();return {isValidWidth:innerWidth>=420&&innerWidth<=440,isValidHeight:innerHeight>=420&&innerHeight<=600,isContentVisible:app?.width===420&&app.left>=0&&app.right<=innerWidth,isFooterVisible:(document.querySelector("footer")?.getBoundingClientRect().bottom??Infinity)<=innerHeight}})()',
       returnByValue: true,
     });
     return result.result.value;
@@ -97,8 +99,29 @@ try {
   await popup.setViewportSize({ width: 420, height: 600 });
   await popup.goto(`chrome-extension://${extensionId}/popup.html`);
   await expect(popup.getByRole('heading', { name: 'MusicLoader', exact: true })).toBeVisible();
-  const card = popup.locator('.track-card');
+  const card = popup.getByRole('region', { name: 'Плеер Звука' });
   await expect(card.getByText('Откройте Звук', { exact: true })).toBeVisible();
+  await expect(popup.getByRole('link', { name: 'Открыть Звук', exact: true })).toHaveAttribute('href', 'https://zvuk.com/');
+  const disclosure = popup.locator('summary').filter({ hasText: 'Дополнительные действия' });
+  const download = popup.getByRole('button', { name: 'Скачать песню', exact: true });
+  const trackLink = popup.getByRole('link', { name: 'Открыть композицию', exact: true });
+  async function openAdditionalActions() {
+    await expect(disclosure).toBeVisible();
+    if (!await disclosure.evaluate((summary) => summary.parentElement.open)) await disclosure.click();
+  }
+
+  async function checkLayout(page, width, height, { popupSurface = false } = {}) {
+    await page.setViewportSize({ width, height });
+    const layout = await page.evaluate(({ popupSurface }) => {
+      const main = document.querySelector('main');
+      const footer = document.querySelector('footer');
+      return {
+        fitsWidth: document.documentElement.scrollWidth === innerWidth && main.scrollWidth === main.clientWidth,
+        footerVisible: !popupSurface || (footer?.getBoundingClientRect().bottom ?? Infinity) <= innerHeight,
+      };
+    }, { popupSurface });
+    assert.deepEqual(layout, { fitsWidth: true, footerVisible: true }, `Границы интерфейса при ширине ${width} px`);
+  }
   assert.deepEqual(await popup.evaluate(() => chrome.runtime.sendMessage({ type: 'PING' })), { type: 'PONG' });
 
   // Собственный fixture проверяет реальную MV3-инъекцию, не обращаясь к сервису.
@@ -130,7 +153,7 @@ try {
   await expect(card.getByText('Ожидание метаданных', { exact: true })).toBeVisible();
   await expect(popup.getByRole('heading', { name: /^Демоочередь/ })).toHaveCount(0);
   await expect(popup.getByRole('listitem')).toHaveCount(0);
-  await expect(popup.getByRole('button', { name: 'Скачать песню', exact: true })).toBeDisabled();
+  await expect(download).toHaveCount(0);
   await setTrack(fixture);
   await expect(card.getByRole('heading', { name: 'Очень-очень', exact: true })).toBeVisible();
   await expect(card.getByText('ARTIK & ASTI', { exact: true })).toBeVisible();
@@ -152,7 +175,30 @@ try {
   await expect(card.getByRole('img', { name: 'Обложка альбома' })).toHaveAttribute('src', optimizedArtwork);
   await setTrack(fixture);
   await expect(card.getByRole('img', { name: 'Обложка альбома' })).toHaveAttribute('src', 'https://zvuk.com/cover.svg');
-  await expect(card.getByRole('link', { name: 'Открыть композицию' })).toHaveAttribute('href', 'https://zvuk.com/track/81400222');
+  await expect(trackLink).toHaveAttribute('href', 'https://zvuk.com/track/81400222');
+  await expect(popup.getByRole('region', { name: 'Диагностика аудио' })).toHaveCount(0);
+  for (const width of [320, 390, 1440]) {
+    await checkLayout(popup, width, 600, { popupSurface: true });
+    assert.ok((await download.boundingBox()).height >= 44);
+    await popup.screenshot({ path: path.join(artifactsPath, `popup-live-${width}.png`), animations: 'disabled' });
+  }
+  await popup.setViewportSize({ width: 420, height: 600 });
+  await download.focus();
+  await popup.keyboard.press('Tab');
+  await expect(trackLink).toBeFocused();
+  await popup.keyboard.press('Tab');
+  await expect(disclosure).toBeFocused();
+  assert.equal(await disclosure.evaluate((summary) => getComputedStyle(summary).outlineWidth), '2px');
+  await popup.keyboard.press('Enter');
+  const recordLink = popup.getByRole('link', { name: 'Записать звук вкладки', exact: true });
+  await expect(recordLink).toBeVisible();
+  await popup.keyboard.press('Tab');
+  await expect(recordLink).toBeFocused();
+  await popup.keyboard.press('Shift+Tab');
+  await expect(disclosure).toBeFocused();
+  await popup.keyboard.press('Space');
+  await expect(recordLink).toHaveCount(0);
+  await popup.keyboard.press('Enter');
   await expect(card.getByText('Текущий трек', { exact: true })).toBeVisible();
   await expect(card.getByRole('img')).toBeVisible();
   await expect(card.getByText('Воспроизводится', { exact: true })).toHaveCount(0);
@@ -176,7 +222,7 @@ try {
   await fixture.evaluate(() => { document.querySelector('#artist').innerHTML = '<a href="/artist/1">Alice</a><span>, </span><a href="/artist/2">Bob</a>'; });
   await expect(card.getByRole('heading', { name: 'Совместный трек', exact: true })).toBeVisible();
   await expect(card.getByText('Alice, Bob', { exact: true })).toBeVisible();
-  await expect(card.getByRole('link', { name: 'Открыть композицию' })).toHaveAttribute('href', 'https://zvuk.com/track/64001');
+  await expect(trackLink).toHaveAttribute('href', 'https://zvuk.com/track/64001');
   await setTrack(fixture);
   await expect(card.getByRole('heading', { name: 'Очень-очень', exact: true })).toBeVisible();
 
@@ -185,9 +231,10 @@ try {
   await setTrack(fixture, { title: 'Следующая композиция', artist: 'Тестовый исполнитель', album: 'Тестовый альбом', id: '42', playbackState: 'playing' });
   await expect(card.getByRole('heading', { name: 'Следующая композиция', exact: true })).toBeVisible();
   await expect(card.getByText('Воспроизводится', { exact: true })).toBeVisible();
-  await expect(card.getByRole('link', { name: 'Открыть композицию' })).toHaveAttribute('href', 'https://zvuk.com/track/42');
+  await expect(trackLink).toHaveAttribute('href', 'https://zvuk.com/track/42');
   await popup.reload();
   await expect(card.getByRole('heading', { name: 'Следующая композиция', exact: true })).toBeVisible();
+  await openAdditionalActions();
 
   // Неоднозначные ID остаются null, затем подтверждённая идентичность восстанавливается.
   await fixture.evaluate(() => {
@@ -196,13 +243,14 @@ try {
     duplicate.innerHTML = '<a href="/track/43">Следующая композиция</a><p>Тестовый исполнитель</p>';
     document.body.append(duplicate);
   });
-  await expect(card.getByRole('link', { name: 'Открыть композицию' })).toHaveCount(0);
-  await expect(card.getByText('ID и ссылка не определены однозначно')).toBeVisible();
+  await expect(trackLink).toHaveCount(0);
+  await expect(popup.getByText('ID и ссылка не определены однозначно')).toBeVisible();
   await fixture.evaluate(() => document.querySelector('#duplicate').remove());
-  await expect(card.getByRole('link', { name: 'Открыть композицию' })).toHaveAttribute('href', 'https://zvuk.com/track/42');
+  await expect(trackLink).toHaveAttribute('href', 'https://zvuk.com/track/42');
 
   // Диагностика включается вручную и хранит только обезличенные признаки.
   const diagnosticPanel = popup.getByRole('region', { name: 'Диагностика аудио' });
+  await openAdditionalActions();
   await diagnosticPanel.getByRole('button', { name: 'Включить', exact: true }).click();
   await expect.poll(async () => (await state()).diagnostics[0]?.report !== null).toBe(true);
   await fixture.evaluate(async () => {
@@ -214,6 +262,10 @@ try {
   const diagnostics = (await state()).diagnostics[0];
   assert.equal(diagnostics.report.quality, null);
   assert.doesNotMatch(JSON.stringify(diagnostics), /DO_NOT_STORE_SECRET|https:|fixture\.flac|token=/);
+  await popup.reload();
+  await expect(diagnosticPanel).toHaveCount(0);
+  await openAdditionalActions();
+  await expect(diagnosticPanel.getByText('Признаки формата: FLAC', { exact: true })).toBeVisible();
   await diagnosticPanel.getByRole('button', { name: 'Выключить', exact: true }).click();
   await expect.poll(async () => (await state()).diagnostics[0]?.report).toBe(null);
 
@@ -344,7 +396,8 @@ try {
     await expect(popup.getByText('Источник содержит служебные параметры доступа. Нужен обезличенный диагностический отчёт.', { exact: true })).toBeVisible();
     await popup.reload();
     await expect(popup.getByText('Источник содержит служебные параметры доступа. Нужен обезличенный диагностический отчёт.', { exact: true })).toBeVisible();
-    await expect(popup.locator('.app-header__caption')).toContainText(`v${extensionVersion}`);
+    await expect(popup.getByText(`v${extensionVersion}`, { exact: true })).toBeVisible();
+    await openAdditionalActions();
     await popup.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (value) => { globalThis.copiedDownloadReport = value; } } }));
     await popup.getByRole('button', { name: 'Копировать диагностику', exact: true }).click();
     await expect(popup.getByText('Диагностика скопирована', { exact: true })).toBeVisible();
@@ -392,11 +445,13 @@ try {
   await restrictedPage.bringToFront();
   await expect(card.getByRole('heading', { name: 'Проверка недоступного плейлиста', exact: true })).toBeVisible();
   await restrictedPage.evaluate(() => fetch('https://cdn-hls-slicer.zvuk.com/tracks/77701/master.m3u8?token=DO_NOT_STORE_SECRET', { credentials: 'omit' }).then((response) => response.text()));
+  await openAdditionalActions();
   await diagnosticPanel.getByRole('button', { name: 'Включить', exact: true }).click();
   await expect(diagnosticPanel.getByText(/Исключено: параметры доступа — [1-9]/)).toBeVisible();
   await popup.getByRole('button', { name: 'Скачать песню', exact: true }).click();
   await expect(popup.getByText('Этот адрес или его параметры не входят в поддерживаемую схему HLS. Сохранение не началось.', { exact: true })).toBeVisible();
   await popup.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (value) => { globalThis.copiedDownloadReport = value; } } }));
+  await openAdditionalActions();
   await popup.getByRole('button', { name: 'Копировать диагностику', exact: true }).click();
   await expect(popup.getByText('Диагностика скопирована', { exact: true })).toBeVisible();
   const restrictedReport = await popup.evaluate(() => globalThis.copiedDownloadReport);
@@ -509,6 +564,7 @@ try {
   await popup.reload();
   await expect(popup.getByText('Запрос ключа отклонён сервером (HTTP 400). Файл не сохранён.', { exact: true })).toBeVisible();
   await popup.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (value) => { globalThis.copiedDownloadReport = value; } } }));
+  await openAdditionalActions();
   await popup.getByRole('button', { name: 'Копировать диагностику', exact: true }).click();
   await expect(popup.getByText('Диагностика скопирована', { exact: true })).toBeVisible();
   const failedKeyReport = await popup.evaluate(() => globalThis.copiedDownloadReport);
@@ -656,19 +712,17 @@ try {
   const preview = await context.newPage();
   await preview.goto(`http://127.0.0.1:${server.address().port}/popup.html`);
   await expect(preview.getByText('Предпросмотр', { exact: true })).toBeVisible();
-  await expect(preview.locator('.track-card').getByText('Откройте Звук', { exact: true })).toBeVisible();
-  await preview.setViewportSize({ width: 320, height: 480 });
-  assert.deepEqual(await preview.evaluate(() => {
-    const app = document.querySelector('.app');
-    const main = document.querySelector('.app__main');
-    const footer = document.querySelector('.app-status');
-    return {
-      fitsWidth: document.documentElement.scrollWidth === innerWidth && main.scrollWidth === main.clientWidth,
-      hasScroll: main.scrollHeight > main.clientHeight,
-      footerVisible: footer.getBoundingClientRect().bottom <= innerHeight && app.getBoundingClientRect().height === innerHeight,
-    };
-  }), { fitsWidth: true, hasScroll: true, footerVisible: true });
-  await preview.screenshot({ path: path.join(artifactsPath, 'popup-narrow.png'), animations: 'disabled' });
+  await expect(preview.getByRole('region', { name: 'Плеер Звука' }).getByText('Откройте Звук', { exact: true })).toBeVisible();
+  const previewAction = preview.getByRole('link', { name: 'Открыть Звук', exact: true });
+  for (const width of [320, 390, 1440]) {
+    await checkLayout(preview, width, 480, { popupSurface: true });
+    assert.ok((await previewAction.boundingBox()).height >= 44);
+    await preview.screenshot({ path: path.join(artifactsPath, `preview-${width}.png`), animations: 'disabled' });
+  }
+  const queueTab = preview.getByRole('tab', { name: 'Все', exact: true });
+  await queueTab.focus();
+  await preview.keyboard.press('ArrowRight');
+  await expect(preview.getByRole('tab', { name: 'В очереди', exact: true })).toHaveAttribute('aria-selected', 'true');
   assert.equal(downloadCount, expectedDownloadCount, 'Без поддержанного явного запроса скачиваний быть не должно');
   // Отдельно проверяем настоящий Chrome Downloads API на собственных локальных байтах.
   const downloadSession = await context.browser().newBrowserCDPSession();
@@ -702,17 +756,22 @@ try {
   await recordingSource.getByRole('button', { name: 'Воспроизвести тестовый сигнал' }).click();
   await recordingSource.bringToFront();
   await expect(card.getByRole('heading', { name: 'Запись тестового сигнала', exact: true })).toBeVisible();
+  await openAdditionalActions();
   const [recorder] = await Promise.all([
     context.waitForEvent('page'),
     popup.getByRole('link', { name: 'Записать звук вкладки', exact: true }).click(),
   ]);
   await expect(recorder.getByRole('heading', { name: 'Запись звука вкладки', exact: true })).toBeVisible();
   await recorder.bringToFront();
-  await recorder.getByRole('button', { name: 'Начать запись', exact: true }).click();
+  await recorder.keyboard.press('Tab');
+  await expect(recorder.getByRole('button', { name: 'Начать запись', exact: true })).toBeFocused();
+  await recorder.keyboard.press('Enter');
   await expect(recorder.getByText(/^Запись идёт\./)).toBeVisible({ timeout: 10000 });
+  await expect(recorder.getByRole('button', { name: 'Остановить запись', exact: true })).toBeFocused();
   await recorder.waitForTimeout(1600); // Даём реальному захвату записать больше одного фрагмента.
   await recorder.getByRole('button', { name: 'Остановить запись', exact: true }).click();
   await expect(recorder.getByText('Запись готова', { exact: true })).toBeVisible();
+  await expect(recorder.getByRole('button', { name: 'Сохранить WebM', exact: true })).toBeFocused();
   const clip = await recorder.locator('audio').evaluate(async (audio) => {
     const bytes = await fetch(audio.src).then((response) => response.arrayBuffer());
     const context = new AudioContext();
@@ -726,6 +785,22 @@ try {
   });
   assert.ok(clip.duration > 0.5, 'В WebM должна быть запись длительностью больше 500 мс');
   assert.ok(clip.peak > 0.01, `WebM должен содержать звук тестового сигнала (пик ${clip.peak})`);
+  for (const width of [320, 390, 1440]) {
+    await checkLayout(recorder, width, 600);
+    await recorder.screenshot({ path: path.join(artifactsPath, `recorder-${width}.png`), animations: 'disabled' });
+  }
+  await recorder.evaluate(() => {
+    navigator.mediaDevices.getDisplayMedia = async () => { throw new DOMException('Fixture selection denied', 'NotAllowedError'); };
+    globalThis.originalRecorderDownload = chrome.downloads.download;
+    chrome.downloads.download = async () => { throw new Error('Fixture save denied'); };
+  });
+  await recorder.getByRole('button', { name: 'Новая запись', exact: true }).press('Enter');
+  await expect(recorder.getByRole('status')).toHaveText('Доступ к вкладке не предоставлен.');
+  await expect(recorder.locator('audio')).toHaveAttribute('src', clip.url);
+  await recorder.getByRole('button', { name: 'Сохранить WebM', exact: true }).press('Enter');
+  await expect(recorder.getByRole('status')).toHaveText('Chrome не сохранил запись. Можно повторить сохранение.');
+  await expect(recorder.locator('audio')).toHaveAttribute('src', clip.url);
+  await recorder.evaluate(() => { chrome.downloads.download = globalThis.originalRecorderDownload; });
   await recorder.getByRole('button', { name: 'Сохранить WebM', exact: true }).click();
   await expect.poll(() => recorder.evaluate(async (url) => (await chrome.downloads.search({ url }))[0]?.state, clip.url)).toBe('complete');
   const recordingFile = await recorder.evaluate(async (url) => (await chrome.downloads.search({ url }))[0].filename, clip.url);
@@ -739,10 +814,11 @@ try {
   console.log(`Браузер ${context.browser().version()}: native popup 420 px, MAIN/isolated, track switch/SPA/dedup, storage, hidden DEMO, direct download, AES-128 HLS→M4A, X-Encrypted-Key and clear fallback, tab audio capture→WebM with audible signal, worker restart/cancel/retry, DRM blocking, dialog и preview: OK`);
   console.log('Скриншоты сохранены в artifacts/. Сайт Звука заменён локальной HTML-заглушкой.');
 } catch (error) {
-  const failedPopup = context.pages().find((page) => page.url().startsWith('chrome-extension://'));
+  const failedPopup = context?.pages().find((page) => page.url().startsWith('chrome-extension://'));
   if (failedPopup) await failedPopup.screenshot({ path: path.join(artifactsPath, 'popup-failure.png'), animations: 'disabled' }).catch(() => {});
   throw error;
 } finally {
-  await context.close();
+  await context?.close();
   if (server) await new Promise((resolve) => server.close(resolve));
+  await rm(profilePath, { recursive: true, force: true, maxRetries: 3 });
 }

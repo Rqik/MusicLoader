@@ -8,7 +8,7 @@ import { useDownloadStore } from '../../store/useDownloadStore';
 import type { DownloadFilter } from '../../types';
 import { DownloadItem } from '../DownloadItem';
 import { DownloadEmpty } from '../DownloadEmpty';
-import './DownloadList.scss';
+import styles from './DownloadList.module.scss';
 
 export function DownloadList() {
   const [filter, setFilter] = useState<DownloadFilter>('all');
@@ -27,13 +27,13 @@ export function DownloadList() {
   }
 
   return (
-    <section className="download-list" aria-labelledby="queue-title">
-      <div className="download-list__heading">
-        <h2 className="download-list__title" id="queue-title">Демоочередь</h2>
-        <div className="download-list__actions">
+    <section className={styles['download-list']} aria-labelledby="queue-title">
+      <div className={styles['download-list__heading']}>
+        <h2 className={styles['download-list__title']} id="queue-title">Демоочередь</h2>
+        <div className={styles['download-list__actions']}>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-sm" className="download-list__action" disabled={!hasActiveTasks && !isPaused} aria-label={isPaused ? 'Продолжить очередь' : 'Приостановить очередь'} onClick={togglePaused}>
+              <Button variant="ghost" size="icon-sm" className={styles['download-list__action']} disabled={!hasActiveTasks && !isPaused} aria-label={isPaused ? 'Продолжить очередь' : 'Приостановить очередь'} onClick={togglePaused}>
                 {isPaused ? <Play aria-hidden="true" /> : <Pause aria-hidden="true" />}
               </Button>
             </TooltipTrigger>
@@ -41,23 +41,23 @@ export function DownloadList() {
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-sm" className="download-list__action" disabled={completedCount === 0} aria-label="Очистить завершённые" onClick={clearCompleted}><Trash2 aria-hidden="true" /></Button>
+              <Button variant="ghost" size="icon-sm" className={styles['download-list__action']} disabled={completedCount === 0} aria-label="Очистить завершённые" onClick={clearCompleted}><Trash2 aria-hidden="true" /></Button>
             </TooltipTrigger>
             <TooltipContent>Очистить завершённые</TooltipContent>
           </Tooltip>
         </div>
       </div>
-      <Tabs value={filter} onValueChange={handleFilterChange} className="download-list__tabs">
-        <TabsList className="download-list__filters" aria-label="Фильтр очереди">
-          <TabsTrigger value="all" className="download-list__filter">Все</TabsTrigger>
-          <TabsTrigger value="active" className="download-list__filter">В очереди</TabsTrigger>
-          <TabsTrigger value="completed" className="download-list__filter">Готово <span className="download-list__filter-count">{completedCount}</span></TabsTrigger>
+      <Tabs value={filter} onValueChange={handleFilterChange} className={styles['download-list__tabs']}>
+        <TabsList className={styles['download-list__filters']} aria-label="Фильтр очереди">
+          <TabsTrigger value="all" className={styles['download-list__filter']}>Все</TabsTrigger>
+          <TabsTrigger value="active" className={styles['download-list__filter']}>В очереди</TabsTrigger>
+          <TabsTrigger value="completed" className={styles['download-list__filter']}>Готово <span className={styles['download-list__filter-count']}>{completedCount}</span></TabsTrigger>
         </TabsList>
-        <TabsContent value={filter} className="download-list__content">
-          {taskIds.length > 0 ? <ul className="download-list__items">{taskIds.map((id) => <DownloadItem key={id} id={id} />)}</ul> : <DownloadEmpty filter={filter} />}
+        <TabsContent value={filter} className={styles['download-list__content']}>
+          {taskIds.length > 0 ? <ul className={styles['download-list__items']}>{taskIds.map((id) => <DownloadItem key={id} id={id} />)}</ul> : <DownloadEmpty filter={filter} />}
         </TabsContent>
       </Tabs>
-      <p className="download-list__summary" role="status">{isPaused ? 'Очередь на паузе' : `${completedCount} из ${total} завершено`}</p>
+      <p className={styles['download-list__summary']} role="status">{isPaused ? 'Очередь на паузе' : `${completedCount} из ${total} завершено`}</p>
     </section>
   );
 }

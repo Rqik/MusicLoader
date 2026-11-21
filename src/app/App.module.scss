@@ -1,0 +1,23 @@
+.app {
+  width: min(100%, var(--popup-width));
+  height: min(100dvh, var(--popup-height));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--background);
+
+  &__main {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    flex-direction: column;
+    gap: var(--space-4);
+    padding: var(--space-4) var(--popup-gutter);
+    overflow: auto;
+  }
+}
+
+:global(html[data-surface="preview"]) .app {
+  margin-inline: auto;
+  border-inline: 1px solid var(--border);
+}

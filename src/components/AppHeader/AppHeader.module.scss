@@ -1,23 +1,23 @@
 .app-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px var(--popup-gutter);
+  gap: var(--space-2);
+  padding: var(--space-2) var(--popup-gutter);
+  border-bottom: 1px solid var(--border);
 
-  &__brand { display: flex; flex: 1; align-items: center; gap: 8px; }
+  &__brand { display: flex; flex: 1; align-items: center; gap: var(--space-2); }
   &__logo {
     display: grid;
     place-items: center;
     width: 36px;
     height: 36px;
     border-radius: 8px;
-    background: var(--secondary);
-    color: var(--secondary-foreground);
+    color: var(--foreground);
   }
   &__title { margin: 0; font-size: 16px; font-weight: 600; line-height: 24px; }
   &__caption { color: var(--muted-foreground); font-size: 12px; }
   &__info { color: var(--muted-foreground); }
   &__dialog { width: min(368px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; padding: 20px; gap: 16px; }
-  &__dialog-heading { padding-right: 24px; text-align: left; }
+  &__dialog-heading { padding-right: var(--control-size); text-align: left; }
   &__details { display: grid; gap: 8px; color: var(--secondary-foreground); font-size: 13px; line-height: 20px; }
 }

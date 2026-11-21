@@ -1,11 +1,7 @@
 .track-card {
-  --cover-size: 96px;
-
   flex-shrink: 0;
-  gap: 12px;
-  padding: 16px;
-  border-radius: 16px;
-  box-shadow: none;
+  display: grid;
+  gap: var(--space-3);
 
   &__heading {
     display: flex;
@@ -17,10 +13,10 @@
     font-size: 12px;
     line-height: 16px;
   }
-  &__track { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 0; }
+  &__track { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
   &__artwork, &__placeholder {
-    width: var(--cover-size);
-    height: var(--cover-size);
+    width: 64px;
+    height: 64px;
     flex-shrink: 0;
     border-radius: 8px;
     background: var(--muted);
@@ -31,12 +27,5 @@
   &__title { margin: 0; font-size: 20px; font-weight: 600; line-height: 24px; }
   &__artist { margin: 4px 0 0; color: var(--secondary-foreground); font-size: 14px; line-height: 20px; }
   &__album { margin: 4px 0 0; color: var(--muted-foreground); font-size: 12px; line-height: 16px; }
-  &__actions { padding: 0; }
-  &__link { padding: 0; color: var(--secondary-foreground); font-size: 13px; }
-  &__link:hover { color: var(--foreground); }
-  &__note { color: var(--muted-foreground); font-size: 12px; line-height: 16px; }
-}
-
-@media (max-width: 360px) {
-  .track-card { --cover-size: 72px; }
+  &__primary { width: 100%; }
 }

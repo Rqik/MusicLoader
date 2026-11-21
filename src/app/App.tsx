@@ -5,10 +5,9 @@ import { AppStatus } from '@/components/AppStatus';
 import { DownloadList } from '@/features/downloads/components/DownloadList';
 import { useDemoDownloads } from '@/features/downloads/hooks/useDemoDownloads';
 import { usePlayerConnection } from '@/features/player/hooks/usePlayerConnection';
-import { AudioDiagnostics } from '@/features/diagnostics/components/AudioDiagnostics';
 import { usePlayerStore, selectIsDemoEnabled } from '@/features/player/store/usePlayerStore';
 import { TrackDownload } from '@/features/downloads/components/TrackDownload';
-import './App.scss';
+import styles from './App.module.scss';
 
 export function App() {
   const isDemoEnabled = usePlayerStore(selectIsDemoEnabled);
@@ -17,12 +16,11 @@ export function App() {
 
   return (
     <TooltipProvider delayDuration={350}>
-      <div className="app">
+      <div className={styles['app']}>
         <AppHeader />
-        <main className="app__main">
+        <main className={styles['app__main']}>
           <TrackCard />
           {isDemoEnabled ? <DownloadList /> : <TrackDownload />}
-          <AudioDiagnostics />
         </main>
         <AppStatus />
       </div>

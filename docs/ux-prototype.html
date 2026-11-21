@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MusicLoader — интерактивный макет</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font: 14px/1.5 "Segoe UI", system-ui, sans-serif;
+      background: #101211;
+      --surface: #141615;
+      --raised: #1c1e1d;
+      --foreground: #eef0ed;
+      --muted: #a4aca7;
+      --border: #303432;
+      --primary: #bcf77b;
+      --primary-ink: #17250c;
+      --error: #ff9d98;
+      --gutter: 20px;
+      --control-height: 44px;
+      --radius: 8px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; padding: 20px 16px 40px; color: var(--foreground); }
+    h1, h2, h3, p, dl, dd { margin: 0; }
+    h1, h2 { font-weight: 600; line-height: 1.25; }
+    h2 { font-size: 22px; }
+    h3 { font-size: 14px; font-weight: 600; }
+    a { color: inherit; }
+    button, select, summary { font: inherit; }
+    button:not(:disabled), summary, select { cursor: pointer; }
+    :focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+
+    .prototype { max-width: 520px; margin-inline: auto; }
+    .prototype__title { font-size: 14px; margin-bottom: 12px; }
+    .prototype__controls { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+    .prototype__field {
+      display: grid;
+      flex: 1 1 120px;
+      min-width: 0;
+      gap: 4px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .prototype__select {
+      width: 100%;
+      min-height: var(--control-height);
+      padding-inline: 8px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--raised);
+      color: var(--foreground);
+    }
+
+    .surface {
+      margin-inline: auto;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface);
+    }
+    .surface--popup { max-width: 420px; }
+    .surface__header, .surface__body, .surface__footer { padding-inline: var(--gutter); }
+    .surface__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-height: 60px;
+      border-bottom: 1px solid var(--border);
+    }
+    .surface__brand { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+    .surface__logo {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      width: 24px;
+      height: 24px;
+      color: var(--muted);
+    }
+    .surface__logo i { width: 1.5px; height: 8px; background: currentColor; border-radius: 1px; }
+    .surface__logo i:nth-child(2), .surface__logo i:nth-child(4) { height: 12px; }
+    .surface__logo i:nth-child(3) { height: 17px; }
+    .surface__body { padding-block: 20px; overflow-wrap: anywhere; }
+    .surface__footer {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-block: 12px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .surface__footer::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border: 1px solid currentColor;
+      border-radius: 50%;
+    }
+    .surface__footer[data-connected="true"]::before { background: currentColor; }
+
+    .track { margin-bottom: 20px; }
+    .track__label { margin-bottom: 12px; color: var(--muted); font-size: 13px; }
+    .track__row { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; align-items: center; }
+    .track__cover { width: 64px; height: 64px; border-radius: var(--radius); background: var(--raised); }
+    .track__detail { color: var(--muted); }
+    .track__detail:first-of-type { margin-top: 4px; color: var(--foreground); }
+    .track__empty { color: var(--muted); margin-top: 8px; }
+    .action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: var(--control-height);
+      padding: 8px 12px;
+      border: 1px solid transparent;
+      border-radius: var(--radius);
+      text-decoration: none;
+      text-align: center;
+      background: transparent;
+      color: var(--foreground);
+      font-weight: 600;
+    }
+    .action--primary { width: 100%; background: var(--primary); color: var(--primary-ink); }
+    .action--secondary { border-color: var(--border); background: var(--raised); }
+    .action--quiet { padding-inline: 0; color: var(--muted); }
+    .action--quiet:hover { color: var(--foreground); text-decoration: underline; }
+    .action[aria-disabled="true"] { opacity: .65; cursor: wait; }
+    .action:disabled { opacity: .55; }
+
+    .feedback { min-width: 0; margin-top: 8px; color: var(--muted); }
+    .feedback:empty { margin-top: 0; }
+    .feedback[data-error="true"] { color: var(--error); }
+    progress { display: block; width: 100%; margin-top: 12px; accent-color: var(--primary); }
+    .more { margin-top: 16px; border-top: 1px solid var(--border); }
+    .more__summary { align-content: center; min-height: var(--control-height); font-weight: 600; }
+    .more__body { padding-block: 0 8px; }
+    .more__row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-height: var(--control-height);
+    }
+    .more__row input { margin: 0; width: 20px; height: 20px; accent-color: var(--primary); }
+    .more__report { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; padding-block: 8px; }
+    .more__report dt { color: var(--muted); }
+    .more__note { color: var(--muted); }
+    .recorder__lead { margin-block: 8px 20px; color: var(--muted); }
+    .recorder__audio { display: block; width: 100%; margin-block: 12px; }
+    .recorder__limit { margin-top: 12px; color: var(--muted); font-size: 13px; }
+
+    dialog {
+      width: min(360px, calc(100% - 32px));
+      padding: 20px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--foreground);
+      background: var(--raised);
+    }
+    dialog::backdrop { background: rgb(0 0 0 / 65%); }
+    .dialog__text { margin-block: 8px 12px; color: var(--muted); }
+    .dialog__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+    .dialog__actions .action--primary { width: auto; }
+    @media (max-width: 360px) {
+      :root { --gutter: 16px; }
+      body { padding-inline: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="prototype">
+    <h1 class="prototype__title">MusicLoader · интерактивный макет</h1>
+    <div class="prototype__controls">
+      <label class="prototype__field">Экран
+        <select class="prototype__select" id="screen">
+          <option value="popup">Popup</option>
+          <option value="recorder">Запись вкладки</option>
+        </select>
+      </label>
+      <label class="prototype__field" id="scenario-field">Сценарий popup
+        <select class="prototype__select" id="scenario">
+          <option value="track">Текущий трек</option>
+          <option value="empty">Звук не открыт</option>
+          <option value="waiting">Ожидание трека</option>
+          <option value="failure">Ошибка скачивания</option>
+          <option value="complete">Загрузка завершена</option>
+        </select>
+      </label>
+      <label class="prototype__field" id="save-field" hidden>Сохранение в Chrome
+        <select class="prototype__select" id="save-outcome">
+          <option value="complete">Успешно</option>
+          <option value="failure">Отмена сохранения</option>
+        </select>
+      </label>
+    </div>
+    <section class="surface surface--popup" id="popup" aria-label="Popup MusicLoader">
+      <header class="surface__header">
+        <span class="surface__brand"><span class="surface__logo" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>MusicLoader</span>
+        <button class="action action--quiet" type="button" id="about-open">О расширении</button>
+      </header>
+      <div class="surface__body">
+        <section class="track" id="track" aria-labelledby="track-title">
+          <p class="track__label">Текущий трек · воспроизводится</p>
+          <div class="track__row">
+            <img class="track__cover" alt="" width="64" height="64" src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22320%22%20height%3D%22320%22%20viewBox%3D%220%200%20320%20320%22%3E%3Cpath%20fill%3D%22%23c29c73%22%20d%3D%22M0%200h320v320H0z%22%2F%3E%3Ccircle%20cx%3D%22160%22%20cy%3D%22132%22%20r%3D%2268%22%20fill%3D%22%23efcf97%22%2F%3E%3Cpath%20fill%3D%22%23738d7c%22%20d%3D%22M0%20194q80-80%20160%200t160%200v126H0Z%22%2F%3E%3Cpath%20fill%3D%22%23426c68%22%20d%3D%22M0%20227q80-80%20160%200t160%200v93H0Z%22%2F%3E%3Cpath%20fill%3D%22%23234d4f%22%20d%3D%22M0%20264q80-80%20160%200t160%200v56H0Z%22%2F%3E%3Cpath%20d%3D%22M0%20243q80-80%20160%200t160%200%22%20fill%3D%22none%22%20stroke%3D%22%23d4dfbf%22%20stroke-opacity%3D%22.6%22%2F%3E%3Ctext%20x%3D%2225%22%20y%3D%22303%22%20fill%3D%22%23c8d9bb%22%20font-family%3D%22sans-serif%22%20font-size%3D%2210%22%20letter-spacing%3D%223%22%3EOWN%20WAVE%20%2F%2004%3C%2Ftext%3E%3C%2Fsvg%3E">
+            <div>
+              <h2 id="track-title">На своей волне</h2>
+              <p class="track__detail">Дом звука</p>
+              <p class="track__detail">Без спешки</p>
+            </div>
+          </div>
+        </section>
+        <section class="track" id="no-track" aria-labelledby="empty-title" hidden>
+          <h2 id="empty-title">Откройте Звук</h2>
+          <p class="track__empty" id="empty-note">После запуска песни здесь появится текущий трек.</p>
+        </section>
+        <a class="action action--primary" id="open-zvuk" href="https://zvuk.com/" target="_blank" rel="noreferrer" hidden>Открыть Звук</a>
+        <div id="download-controls">
+          <button class="action action--primary" type="button" id="download">Скачать песню</button>
+          <progress id="progress" max="100" value="0" aria-label="Подготовка аудиофайла" hidden></progress>
+          <p class="feedback" role="status" id="download-message"></p>
+          <button class="action action--quiet" type="button" id="downloads" hidden>Открыть загрузки</button>
+          <button class="action action--quiet" type="button" id="open-track">Открыть композицию</button>
+        </div>
+        <details class="more" id="more">
+          <summary class="more__summary">Дополнительные действия</summary>
+          <div class="more__body">
+            <button class="action action--quiet" type="button" id="open-recorder">Записать звук вкладки</button>
+            <label class="more__row" for="diagnostics">Диагностика аудио
+              <input type="checkbox" id="diagnostics">
+            </label>
+            <dl class="more__report" id="report" hidden>
+              <dt>Формат</dt><dd>MP4</dd>
+              <dt>Доставка</dt><dd>HLS, сегменты</dd>
+              <dt>Качество</dt><dd>Не определено</dd>
+            </dl>
+            <button class="action action--quiet" type="button" id="copy">Копировать диагностику</button>
+            <p class="feedback" role="status" id="copy-message"></p>
+          </div>
+        </details>
+      </div>
+      <footer class="surface__footer" id="connection" role="status" data-connected="true">Звук подключён</footer>
+    </section>
+
+    <section class="surface" id="recorder" aria-labelledby="recorder-title" hidden>
+      <header class="surface__header">
+        <span class="surface__brand"><span class="surface__logo" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>MusicLoader</span>
+      </header>
+      <div class="surface__body">
+        <h2 id="recorder-title">Запись звука вкладки</h2>
+        <p class="recorder__lead">Запишите звук из вкладки Chrome и сохраните запись в WebM.</p>
+        <button class="action action--primary" type="button" id="start">Начать запись</button>
+        <button class="action action--primary" type="button" id="stop" hidden>Остановить запись</button>
+        <button class="action action--primary" type="button" id="save" hidden>Сохранить WebM</button>
+        <p class="feedback" id="record-message" role="status"></p>
+        <audio class="recorder__audio" id="audio" controls preload="metadata" aria-label="Прослушать запись" hidden></audio>
+        <button class="action action--quiet" type="button" id="new-recording" hidden>Новая запись</button>
+        <details class="more">
+          <summary class="more__summary">Как выбрать вкладку</summary>
+          <p class="more__note">Поставьте песню на паузу. Нажмите «Начать запись», выберите вкладку Звука и включите передачу аудио. Затем запустите песню.</p>
+        </details>
+        <p class="recorder__limit">До 15 минут. Сохраните запись перед закрытием вкладки.</p>
+      </div>
+    </section>
+    <dialog id="about" aria-labelledby="about-title">
+      <h2 id="about-title">О MusicLoader</h2>
+      <p class="dialog__text">Показывает текущий трек Звука и помогает сохранить доступный аудиофайл. Поддерживаемые потоки сохраняются в M4A.</p>
+      <form method="dialog" class="dialog__actions"><button class="action action--secondary" autofocus>Закрыть</button></form>
+    </dialog>
+    <dialog id="capture" aria-labelledby="capture-title">
+      <h2 id="capture-title">Выбор вкладки</h2>
+      <p class="dialog__text">Демонстрация выбора источника в Chrome. Выбрана вкладка «Звук».</p>
+      <form method="dialog">
+        <label class="more__row" for="share-audio">Передавать звук вкладки
+          <input type="checkbox" id="share-audio" checked>
+        </label>
+        <div class="dialog__actions">
+          <button class="action action--secondary" value="cancel">Отмена</button>
+          <button class="action action--primary" value="share">Поделиться</button>
+        </div>
+      </form>
+    </dialog>
+  </main>
+  <script>
+    const find = (id) => document.getElementById(id);
+    const screen = find('screen');
+    const scenario = find('scenario');
+    const download = find('download');
+    const progress = find('progress');
+    const diagnostics = find('diagnostics');
+    const capture = find('capture');
+    const audio = find('audio');
+    let downloadTimers = [];
+    let recording = false;
+    let clipUrl = null;
+
+    function feedback(id, text, error = false) {
+      const message = find(id);
+      message.dataset.error = String(error);
+      message.textContent = text;
+    }
+
+    function showScreen() {
+      const popup = screen.value === 'popup';
+      find('popup').hidden = !popup;
+      find('scenario-field').hidden = !popup;
+      find('recorder').hidden = popup;
+      find('save-field').hidden = popup;
+    }
+
+    function showScenario() {
+      downloadTimers.forEach(clearTimeout);
+      downloadTimers = [];
+      const state = scenario.value;
+      const hasTrack = state !== 'empty' && state !== 'waiting';
+      find('track').hidden = !hasTrack;
+      find('no-track').hidden = hasTrack;
+      find('open-zvuk').hidden = state !== 'empty';
+      find('download-controls').hidden = !hasTrack;
+      find('more').hidden = state === 'empty';
+      find('empty-title').textContent = state === 'waiting' ? 'Включите композицию' : 'Откройте Звук';
+      find('empty-note').textContent = state === 'waiting'
+        ? 'Запустите песню во вкладке Звука.'
+        : 'После запуска песни здесь появится текущий трек.';
+      find('connection').textContent = state === 'empty' ? 'Звук не открыт' : 'Звук подключён';
+      find('connection').dataset.connected = String(state !== 'empty');
+      download.removeAttribute('aria-disabled');
+      download.textContent = 'Скачать песню';
+      progress.hidden = true;
+      find('downloads').hidden = state !== 'complete';
+      const downloadMessage = {
+        failure: 'Не удалось найти аудиоисточник. Обновите вкладку Звука, запустите трек и попробуйте снова.',
+        complete: 'Файл сохранён. Его можно найти в загрузках Chrome.',
+      };
+      feedback('download-message', downloadMessage[state] || '', state === 'failure');
+    }
+
+    download.addEventListener('click', () => {
+      if (download.getAttribute('aria-disabled') === 'true') return;
+      const outcome = scenario.value === 'failure' ? 'failure' : 'complete';
+      download.setAttribute('aria-disabled', 'true');
+      download.textContent = 'Готовим файл…';
+      progress.value = 35;
+      progress.hidden = false;
+      find('downloads').hidden = true;
+      feedback('download-message', 'Подготовка аудиофайла…');
+      downloadTimers = [
+        setTimeout(() => { progress.value = 75; }, 400),
+        setTimeout(() => {
+          scenario.value = outcome;
+          showScenario();
+        }, 850),
+      ];
+    });
+
+    find('downloads').addEventListener('click', () => feedback('download-message', 'В расширении здесь открывается список загрузок Chrome.'));
+    find('open-track').addEventListener('click', () => feedback('download-message', 'В расширении здесь открывается композиция на Звуке.'));
+    diagnostics.addEventListener('change', () => { find('report').hidden = !diagnostics.checked; });
+    find('copy').addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(JSON.stringify({
+          mock: true,
+          state: scenario.value,
+          diagnosticsEnabled: diagnostics.checked,
+        }, null, 2));
+        feedback('copy-message', 'Диагностика скопирована');
+      } catch {
+        feedback('copy-message', 'Не удалось скопировать. Проверьте доступ к буферу обмена.', true);
+      }
+    });
+
+    screen.addEventListener('change', showScreen);
+    scenario.addEventListener('change', showScenario);
+    find('about-open').addEventListener('click', () => find('about').showModal());
+    find('open-recorder').addEventListener('click', () => {
+      screen.value = 'recorder';
+      showScreen();
+      find(recording ? 'stop' : clipUrl ? 'save' : 'start').focus();
+    });
+
+    function showRecording() {
+      find('start').hidden = recording || Boolean(clipUrl);
+      find('stop').hidden = !recording;
+      find('save').hidden = recording || !clipUrl;
+      find('new-recording').hidden = recording || !clipUrl;
+      audio.hidden = recording || !clipUrl;
+    }
+
+    function chooseTab() {
+      capture.returnValue = 'cancel';
+      find('share-audio').checked = true;
+      capture.showModal();
+    }
+
+    find('start').addEventListener('click', chooseTab);
+    find('new-recording').addEventListener('click', chooseTab);
+    capture.addEventListener('close', () => {
+      if (capture.returnValue !== 'share') {
+        feedback('record-message', 'Выбор вкладки отменён.', true);
+        return;
+      }
+      if (!find('share-audio').checked) {
+        feedback('record-message', 'Включите передачу звука вкладки в окне Chrome.', true);
+        return;
+      }
+      audio.pause();
+      recording = true;
+      showRecording();
+      feedback('record-message', 'Идёт запись звука вкладки.');
+      find('stop').focus();
+    });
+
+    function demoClip() {
+      const rate = 8000;
+      const samples = rate;
+      const bytes = new Uint8Array(44 + samples * 2);
+      const view = new DataView(bytes.buffer);
+      const stamp = (offset, text) => bytes.set(new TextEncoder().encode(text), offset);
+      stamp(0, 'RIFF');
+      view.setUint32(4, bytes.length - 8, true);
+      stamp(8, 'WAVEfmt ');
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true);
+      view.setUint32(24, rate, true);
+      view.setUint32(28, rate * 2, true);
+      view.setUint16(32, 2, true);
+      view.setUint16(34, 16, true);
+      stamp(36, 'data');
+      view.setUint32(40, samples * 2, true);
+      for (let index = 0; index < samples; index += 1) {
+        const portion = index / samples;
+        const gain = Math.min(portion * 16, (1 - portion) * 8, 1);
+        view.setInt16(44 + index * 2, Math.sin(portion * 2 * Math.PI * 220) * gain * 2500, true);
+      }
+      return URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' }));
+    }
+
+    find('stop').addEventListener('click', () => {
+      recording = false;
+      if (clipUrl) URL.revokeObjectURL(clipUrl);
+      clipUrl = demoClip();
+      audio.src = clipUrl;
+      showRecording();
+      feedback('record-message', 'Запись готова к сохранению.');
+      find('save').focus();
+    });
+
+    find('save').addEventListener('click', () => {
+      const failed = find('save-outcome').value === 'failure';
+      feedback('record-message', failed
+        ? 'Chrome не сохранил запись. Попробуйте сохранить снова.'
+        : 'Запись передана в загрузки Chrome.', failed);
+    });
+  </script>
+</body>
+</html>

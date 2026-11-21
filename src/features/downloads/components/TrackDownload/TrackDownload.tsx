@@ -1,16 +1,18 @@
 import { useState } from 'react';
-import { Copy, Download, LoaderCircle } from 'lucide-react';
+import { ArrowUpRight, Copy, Download, LoaderCircle } from 'lucide-react';
+import { Disclosure } from '@/components/Disclosure/Disclosure';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { usePlayerStore, selectCurrentSource } from '@/features/player/store/usePlayerStore';
 import { sendExtensionMessage } from '@/shared/messaging/client';
 import { getAppVersion } from '@/shared/lib/version';
 import { isAudioDiagnostics } from '@/features/diagnostics/validation';
+import { AudioDiagnostics } from '@/features/diagnostics/components/AudioDiagnostics';
 import type { DownloadUnavailableReason } from '../../lib/direct-download';
 import type { DownloadAttempt } from '../../lib/download-attempt';
 import type { HlsRequestFailure } from '../../lib/hls-request';
 import { useDownloadAttempt } from '../../hooks/useDownloadAttempt';
-import './TrackDownload.scss';
+import styles from './TrackDownload.module.scss';
 
 const unavailableMessages: Record<DownloadUnavailableReason, string> = {
   'no-track': 'Сначала включите композицию и дождитесь её названия.',
@@ -61,7 +63,7 @@ function attemptMessage(attempt: DownloadAttempt): string {
   if (attempt.reason) return unavailableMessage(attempt.reason, attempt.request);
   switch (attempt.phase) {
     case 'checking': return 'Проверяем связь с вкладкой Звука…';
-    case 'preparing': return `Подготовка аудиофайла: ${attempt.progress}%. Интервал между запросами — не меньше 300 мс.`;
+    case 'preparing': return 'Подготавливаем аудиофайл…';
     case 'starting': return 'Файл подготовлен. Подтвердите сохранение в окне Chrome.';
     case 'started': return 'Скачивание передано Chrome. Статус доступен в списке загрузок браузера.';
     case 'complete': return 'Файл сохранён. Он доступен в списке загрузок браузера.';
@@ -72,11 +74,14 @@ function attemptMessage(attempt: DownloadAttempt): string {
 
 export function TrackDownload() {
   const source = usePlayerStore(selectCurrentSource);
+  const phase = usePlayerStore((state) => state.phase);
   const diagnostic = usePlayerStore((state) => state.diagnostics.find((item) => item.tabId === source?.tabId));
   const attempt = useDownloadAttempt(source?.tabId);
   const [isPending, setIsPending] = useState(false);
   const [feedback, setFeedback] = useState<{ key: string; message: string } | null>(null);
-  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState<{ tabId: number; message: string } | null>(null);
+  const [hasDownloadsError, setHasDownloadsError] = useState(false);
+  const canUseSource = phase === 'ready' && source?.connection === 'connected';
   const trackKey = JSON.stringify([source?.tabId, source?.track?.id, source?.track?.title, source?.track?.artist, source?.track?.album]);
   const currentFeedback = feedback?.key === trackKey ? feedback : null;
   const isAttemptActive = attempt?.phase === 'checking' || attempt?.phase === 'preparing' || attempt?.phase === 'starting';
@@ -85,10 +90,15 @@ export function TrackDownload() {
   const isPreviousTrack = attempt !== null && attemptKey !== trackKey;
   const message = isPending && !isAttemptActive ? 'Проверяем связь с вкладкой Звука…'
     : attempt ? attemptMessage(attempt) : currentFeedback?.message;
+  const showRecorderWithError = canUseSource && !isPreviousTrack && attempt?.reason === 'hls-wrapped-key';
+  const recorderLink = <Button variant="ghost" className={styles['track-download__secondary']} asChild>
+    <a href="./recorder.html" target="_blank" rel="noreferrer">Записать звук вкладки <ArrowUpRight aria-hidden="true" /></a>
+  </Button>;
+
   async function handleDownload() {
-    if (!source?.track || isBusy) return;
+    if (!source?.track || !canUseSource || isBusy) return;
     const { tabId, track } = source;
-    setIsPending(true); setFeedback(null); setCopyFeedback(null);
+    setIsPending(true); setFeedback(null); setCopyFeedback(null); setHasDownloadsError(false);
     try {
       const response = await sendExtensionMessage({ type: 'DOWNLOAD_TRACK', tabId, track });
       const message = response.type === 'DOWNLOAD_STARTED' ? 'Скачивание передано Chrome. Статус доступен в списке загрузок браузера.'
@@ -99,6 +109,7 @@ export function TrackDownload() {
     finally { setIsPending(false); }
   }
   async function copyDiagnostics() {
+    if (!source) return;
     // Only the bounded status and public text fields; never copy artwork, media URLs or request errors.
     const publicText = (value: string | null) => value?.replace(/(?:https?:\/\/|blob:|data:)\S+/gi, '[адрес скрыт]') ?? null;
     const report = {
@@ -113,29 +124,45 @@ export function TrackDownload() {
         track: { id: attempt.track.id, title: publicText(attempt.track.title), artist: publicText(attempt.track.artist), album: publicText(attempt.track.album) },
       } : null,
     };
-    try { await navigator.clipboard.writeText(JSON.stringify(report, null, 2)); setCopyFeedback('Диагностика скопирована'); }
-    catch { setCopyFeedback('Не удалось скопировать. Разрешите доступ к буферу для окна расширения.'); }
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(report, null, 2));
+      setCopyFeedback({ tabId: source.tabId, message: 'Диагностика скопирована' });
+    } catch {
+      setCopyFeedback({ tabId: source.tabId, message: 'Не удалось скопировать. Разрешите доступ к буферу для окна расширения.' });
+    }
   }
+
+  async function openDownloads() {
+    setHasDownloadsError(false);
+    try { await chrome.tabs.create({ url: 'chrome://downloads/' }); }
+    catch { setHasDownloadsError(true); }
+  }
+
+  if (!source) return null;
+
   return (
-    <section className="track-download" aria-labelledby="track-download-title">
-      <div className="track-download__header">
-        <h2 className="track-download__title" id="track-download-title">Сохранение трека</h2>
-        <Button disabled={!source?.track || source.connection !== 'connected' || isBusy} onClick={() => { void handleDownload(); }}>
-          {isBusy ? <LoaderCircle data-icon="inline-start" className="track-download__spinner" /> : <Download data-icon="inline-start" />}
+    <section className={styles['track-download']} aria-label="Сохранение трека">
+      {source.track && canUseSource ? <Button className={styles['track-download__primary']} aria-disabled={isBusy} onClick={() => { void handleDownload(); }}>
+          {isBusy ? <LoaderCircle aria-hidden="true" className={styles['track-download__spinner']} /> : <Download aria-hidden="true" />}
           {isBusy ? 'Готовим файл…' : 'Скачать песню'}
+      </Button> : null}
+      {source.track?.url && canUseSource ? <Button variant="ghost" className={styles['track-download__secondary']} asChild>
+        <a href={source.track.url} target="_blank" rel="noreferrer">Открыть композицию <ArrowUpRight aria-hidden="true" /></a>
+      </Button> : source.track && canUseSource ? <p className={styles['track-download__note']}>ID и ссылка не определены однозначно</p> : null}
+      {isAttemptActive ? <Progress value={attempt.progress} aria-label="Подготовка аудиофайла" className={styles['track-download__progress']} /> : null}
+      {isPreviousTrack ? <p className={styles['track-download__note']}>Последняя попытка: {attempt.track.title} — {attempt.track.artist}</p> : null}
+      <p className={styles['track-download__note']} role="status">{message}</p>
+      {showRecorderWithError ? recorderLink : null}
+      {attempt && attempt.downloadId !== null ? <Button variant="ghost" className={styles['track-download__secondary']} onClick={() => { void openDownloads(); }}>Открыть загрузки</Button> : null}
+      {hasDownloadsError ? <p className={styles['track-download__note']} role="alert">Не удалось открыть загрузки Chrome.</p> : null}
+      <Disclosure label="Дополнительные действия">
+        {canUseSource && !showRecorderWithError ? recorderLink : null}
+        <AudioDiagnostics key={source.tabId} canToggle={canUseSource} />
+        <Button variant="ghost" className={styles['track-download__secondary']} onClick={() => { void copyDiagnostics(); }}>
+          <Copy aria-hidden="true" />Копировать диагностику
         </Button>
-      </div>
-      {isAttemptActive ? <Progress value={attempt.progress} aria-label="Подготовка аудиофайла" className="track-download__progress" /> : null}
-      {isPreviousTrack ? <p className="track-download__note">Последняя попытка: {attempt.track.title} — {attempt.track.artist}</p> : null}
-      {message ? <p className="track-download__note" role="status">{message}</p> : null}
-      {source ? <div className="track-download__actions">
-        {source.connection === 'connected' ? <Button variant="outline" size="sm" asChild>
-          <a href="./recorder.html" target="_blank" rel="noreferrer">Записать звук вкладки</a>
-        </Button> : null}
-        <Button variant="ghost" size="sm" onClick={() => { void copyDiagnostics(); }}><Copy data-icon="inline-start" />Копировать диагностику</Button>
-        {attempt && attempt.downloadId !== null ? <Button variant="ghost" size="sm" onClick={() => { void chrome.tabs.create({ url: 'chrome://downloads/' }); }}>Открыть загрузки</Button> : null}
-      </div> : null}
-      {copyFeedback ? <p className="track-download__note" role="status">{copyFeedback}</p> : null}
+        <p className={styles['track-download__note']} role="status">{copyFeedback?.tabId === source.tabId ? copyFeedback.message : null}</p>
+      </Disclosure>
     </section>
   );
 }

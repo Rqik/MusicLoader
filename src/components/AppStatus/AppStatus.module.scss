@@ -1,0 +1,12 @@
+.app-status {
+  flex-shrink: 0;
+  padding: var(--space-3) var(--popup-gutter);
+  border-top: 1px solid var(--border);
+  background: var(--background);
+
+  &__connection { display: flex; align-items: center; gap: 8px; color: var(--muted-foreground); font-size: 12px; line-height: 16px; }
+  &__dot { width: 6px; height: 6px; flex-shrink: 0; border: 1px solid currentColor; border-radius: 50%; }
+  &__connection[data-connection="connected"] &__dot { background: currentColor; }
+  &__connection[data-connection="error"] { color: var(--destructive); }
+  &__connection[data-connection="error"] &__dot { background: var(--destructive); }
+}

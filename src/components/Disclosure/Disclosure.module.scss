@@ -1,0 +1,23 @@
+.disclosure {
+  border-top: 1px solid var(--border);
+
+  &__summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    min-height: var(--control-size);
+    padding-inline: var(--space-1);
+    color: var(--secondary-foreground);
+    list-style: none;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  &__summary::-webkit-details-marker { display: none; }
+  &__summary:hover { color: var(--foreground); }
+  &__summary:focus-visible { outline-offset: 0; }
+  &[open] &__icon { transform: rotate(180deg); }
+  &__content { display: grid; gap: var(--space-3); padding-block: var(--space-2); }
+}

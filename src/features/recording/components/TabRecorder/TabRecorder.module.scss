@@ -1,0 +1,17 @@
+.tab-recorder {
+  min-height: 100dvh;
+  padding: var(--space-6) var(--popup-gutter);
+
+  &__panel { display: grid; max-width: 520px; margin-inline: auto; gap: var(--space-5); }
+  &__heading { display: grid; gap: var(--space-3); color: var(--secondary-foreground); font-size: 14px; line-height: 20px; }
+  &__brand { display: flex; align-items: center; gap: var(--space-2); color: var(--muted-foreground); font-size: 12px; }
+  &__brand svg { width: 16px; height: 16px; }
+  &__title { color: var(--foreground); font-size: 24px; font-weight: 600; line-height: 28px; }
+  &__body { display: grid; gap: var(--space-3); }
+  &__actions { display: grid; gap: var(--space-2); }
+  &__status { color: var(--secondary-foreground); font-size: 14px; line-height: 20px; }
+  &__status:empty { position: absolute; }
+  &__preview { display: block; width: 100%; }
+  &__steps { display: grid; gap: var(--space-1); padding-inline-start: var(--space-5); list-style-type: decimal; color: var(--secondary-foreground); font-size: 14px; }
+  &__note { color: var(--muted-foreground); font-size: 12px; line-height: 16px; }
+}

@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { AudioLines, Download, Square } from 'lucide-react';
+import { Disclosure } from '@/components/Disclosure/Disclosure';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { recordTabAudio, RecordingError, type RecordingFailure } from '../../record-tab-audio';
-import './TabRecorder.scss';
+import styles from './TabRecorder.module.scss';
 
 type Phase = 'idle' | 'choosing' | 'recording' | 'finishing';
 type Clip = { url: string; filename: string };
@@ -12,15 +12,15 @@ type Session = { controller: AbortController; stop?: () => void };
 const errorMessages: Record<RecordingFailure, string> = {
   unsupported: 'Запись WebM/Opus доступна в Chrome.',
   'selection-denied': 'Доступ к вкладке не предоставлен.',
-  'wrong-surface': 'Выбери вкладку Chrome в окне выбора источника.',
-  'no-audio': 'Chrome не передал звук. При выборе вкладки включи «Поделиться аудио вкладки».',
-  empty: 'Chrome не передал аудиоданные. Запусти воспроизведение и попробуй снова.',
-  'too-large': 'Размер записи превысил 64 МиБ. Попробуй записать более короткий фрагмент.',
+  'wrong-surface': 'Выберите вкладку Chrome в окне выбора источника.',
+  'no-audio': 'Chrome не передал звук. При выборе вкладки включите «Поделиться аудио вкладки».',
+  empty: 'Chrome не передал аудиоданные. Запустите воспроизведение и попробуйте снова.',
+  'too-large': 'Размер записи превысил 64 МиБ. Попробуйте записать более короткий фрагмент.',
   'capture-failed': 'Chrome не смог записать звук вкладки.',
 };
 const phaseMessages: Record<Exclude<Phase, 'idle'>, string> = {
-  choosing: 'Выбери вкладку Звука в окне Chrome',
-  recording: 'Запись идёт. Включи трек и вернись сюда, чтобы остановить запись.',
+  choosing: 'Выберите вкладку Звука в окне Chrome',
+  recording: 'Запись идёт. Включите трек и вернитесь сюда, чтобы остановить запись.',
   finishing: 'Подготавливаем аудиофайл…',
 };
 
@@ -31,6 +31,7 @@ export function TabRecorder() {
   const [isSaving, setIsSaving] = useState(false);
   const session = useRef<Session | null>(null);
   const clipUrl = useRef<string | null>(null);
+  const primaryAction = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     function abortCapture() { session.current?.controller.abort(); }
     window.addEventListener('pagehide', abortCapture);
@@ -44,7 +45,7 @@ export function TabRecorder() {
   }, []);
 
   async function start() {
-    if (session.current) return;
+    if (session.current || isSaving) return;
     const current: Session = { controller: new AbortController() };
     session.current = current;
     setMessage('');
@@ -55,8 +56,8 @@ export function TabRecorder() {
         setPhase('recording');
       });
       if (current.controller.signal.aborted) return;
-      if (clipUrl.current) URL.revokeObjectURL(clipUrl.current);
       const url = URL.createObjectURL(result.blob);
+      if (clipUrl.current) URL.revokeObjectURL(clipUrl.current);
       clipUrl.current = url;
       const stamp = new Date().toISOString().slice(0, 19).replace('T', '_').replaceAll(':', '-');
       setClip({ url, filename: `MusicLoader/Запись вкладки ${stamp}.webm` });
@@ -91,28 +92,49 @@ export function TabRecorder() {
     }
   }
 
+  const buttonLabel = phase === 'recording' ? 'Остановить запись' : phase === 'choosing' ? 'Выбор вкладки…'
+    : phase === 'finishing' ? 'Готовим запись…' : isSaving ? 'Сохраняем запись…' : clip ? 'Сохранить WebM' : 'Начать запись';
+
+  function handlePrimaryAction() {
+    if (phase === 'recording') stop();
+    else if (phase === 'idle' && !isSaving) {
+      if (clip) void save();
+      else void start();
+    }
+  }
+
   return (
-    <main className="tab-recorder">
-      <Card className="tab-recorder__panel">
-        <CardHeader className="tab-recorder__heading">
-          <span className="tab-recorder__brand"><AudioLines aria-hidden="true" />MusicLoader</span>
-          <h1 className="tab-recorder__title">Запись звука вкладки</h1>
-          <p>Поставь трек на паузу в начале. Нажми «Начать запись», выбери вкладку Звука и включи передачу её звука.</p>
-        </CardHeader>
-        <CardContent className="tab-recorder__body">
-          <div className="tab-recorder__actions">
-            {phase === 'recording'
-              ? <Button onClick={stop}><Square aria-hidden="true" />Остановить запись</Button>
-              : <Button variant={clip ? 'outline' : 'default'} disabled={phase !== 'idle' || isSaving} onClick={() => { void start(); }}>
-                {clip ? 'Новая запись' : 'Начать запись'}
-              </Button>}
-            {clip && phase === 'idle' ? <Button disabled={isSaving} onClick={() => { void save(); }}><Download aria-hidden="true" />Сохранить WebM</Button> : null}
+    <main className={styles['tab-recorder']}>
+      <div className={styles['tab-recorder__panel']}>
+        <header className={styles['tab-recorder__heading']}>
+          <span className={styles['tab-recorder__brand']}><AudioLines aria-hidden="true" />MusicLoader</span>
+          <h1 className={styles['tab-recorder__title']}>Запись звука вкладки</h1>
+          {!clip && phase === 'idle' ? <p>Поставьте трек на паузу перед началом записи.</p> : null}
+        </header>
+        <div className={styles['tab-recorder__body']}>
+          <p role="status" className={styles['tab-recorder__status']}>{phase === 'idle' ? message : phaseMessages[phase]}</p>
+          {clip && phase === 'idle' ? <audio className={styles['tab-recorder__preview']} src={clip.url} controls preload="metadata" aria-label="Прослушать запись" /> : null}
+          <div className={styles['tab-recorder__actions']}>
+            <Button ref={primaryAction} aria-disabled={phase === 'choosing' || phase === 'finishing' || isSaving} onClick={handlePrimaryAction}>
+              {phase === 'recording' ? <Square aria-hidden="true" /> : clip && phase === 'idle' ? <Download aria-hidden="true" /> : null}
+              {buttonLabel}
+            </Button>
+            {clip && phase === 'idle' ? <Button variant="ghost" aria-disabled={isSaving} onClick={() => {
+              if (isSaving) return;
+              primaryAction.current?.focus();
+              void start();
+            }}>Новая запись</Button> : null}
           </div>
-          <p role="status" className="tab-recorder__status">{phase === 'idle' ? message : phaseMessages[phase]}</p>
-          {clip && phase === 'idle' ? <audio className="tab-recorder__preview" src={clip.url} controls preload="metadata" aria-label="Прослушать запись" /> : null}
-          <p className="tab-recorder__note">WebM/Opus · до 15 минут. Сохрани запись перед закрытием этой вкладки.</p>
-        </CardContent>
-      </Card>
+          <Disclosure label="Как выбрать вкладку">
+            <ol className={styles['tab-recorder__steps']}>
+              <li>Нажмите «Начать запись» и выберите вкладку Chrome со Звуком.</li>
+              <li>Включите «Поделиться аудио вкладки» и подтвердите выбор.</li>
+              <li>Запустите трек и вернитесь сюда, чтобы остановить запись.</li>
+            </ol>
+          </Disclosure>
+          <p className={styles['tab-recorder__note']}>WebM/Opus · до 15 минут. Сохраните запись перед закрытием вкладки.</p>
+        </div>
+      </div>
     </main>
   );
 }

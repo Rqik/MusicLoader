@@ -183,7 +183,11 @@ export async function downloadHlsTrack(
       if (encryptionKeys.size > maxKeys) throw new HlsDownloadError('hls-unsupported');
     }
     try {
-      parts.push(await readInit(media, selected));
+      const init = await readInit(media, selected);
+      // A clear init can be followed by encrypted segments. Resolve the keys before
+      // starting the segment workers so a key failure can still select a clear variant.
+      for (const url of encryptionKeys) await getKey(url);
+      parts.push(init);
     } catch (error) {
       if (!(error instanceof HlsDownloadError) || error.request?.resource !== 'key') throw error;
       const canUseClearVariant = error.code === 'hls-wrapped-key'

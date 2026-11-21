@@ -219,6 +219,32 @@ describe('user initiated HLS download service', () => {
     });
   }
 
+  it('saves the open variant when only the selected segments require a wrapped key', async () => {
+    const network = fixture();
+    network.install();
+    const keyUrl = `https://zvuk.com/keyserver/api/v1/key?track_id=${trackId}&quality=hq&content_type=track`;
+    const alternate = `${root}clear/playlist.m3u8`;
+    const selected = `${root}aac/playlist.m3u8`;
+    network.resources.set(masterUrl, master([
+      { uri: 'aac/playlist.m3u8', bandwidth: 256000, codec: 'mp4a.40.2' },
+      { uri: 'clear/playlist.m3u8', bandwidth: 128000, codec: 'mp4a.40.2' },
+    ]));
+    network.resources.set(selected, media(2, ['#EXT-X-KEY:METHOD=NONE', `#EXT-X-KEY:METHOD=AES-128,URI="${keyUrl}"`]));
+    network.resources.set(keyUrl, async () => new Response(new Uint8Array(16)));
+    network.resources.set(alternate, media(2));
+    const init = initialization();
+    const segments = [fragment(42), fragment(43)];
+    network.resources.set(`${root}clear/init.mp4`, init);
+    for (const [index, bytes] of segments.entries()) network.resources.set(`${root}clear/segment-${index}.m4s`, bytes);
+
+    const blob = await network.download([masterUrl], trackId, new AbortController().signal, () => {});
+    assert.deepEqual(new Uint8Array(await blob.arrayBuffer()), concat(init, ...segments));
+    assert.equal(network.calls.filter(({ url }) => url === keyUrl).length, 1);
+    assert.deepEqual(network.calls.filter(({ url }) => url.endsWith('.m4s')).map(({ url }) => url), [
+      `${root}clear/segment-0.m4s`, `${root}clear/segment-1.m4s`,
+    ]);
+  });
+
   it('keeps the key HTTP 400 failure when observed variants are encrypted or belong outside the master', async () => {
     const network = fixture();
     network.install();

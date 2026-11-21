@@ -1,6 +1,6 @@
 {
   "name": "music-loader",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "private": true,
   "type": "module",
   "description": "Chrome MV3 расширение с метаданными Звука и безопасной диагностикой аудио",

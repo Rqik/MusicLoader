@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MusicLoader",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "description": "Текущий трек Звука, сохранение доступного аудиофайла и безопасная диагностика.",
   "permissions": ["storage", "downloads"],
   "host_permissions": ["https://*.zvuk.com/*"],

@@ -9,20 +9,10 @@ const maxCandidates = 8;
 const maxKeys = 16;
 type MediaPlaylist = Extract<HlsManifest, { kind: 'media' }>;
 
-function findClearVariant(
-  variants: readonly HlsVariant[],
-  observed: ReadonlyMap<string, HlsManifest>,
-  duration: number,
-) {
-  for (const variant of variants) {
-    const media = observed.get(variant.url);
-    // Allow small rounding differences between renditions and skip shorter previews.
-    if (media?.kind === 'media' && Math.abs(media.duration - duration) <= 1
-      && media.init.encryption.method === 'none' && media.segments.every((segment) => segment.encryption.method === 'none')) {
-      return { variant, media };
-    }
-  }
-  return null;
+function isCompleteClearMedia(manifest: HlsManifest | undefined, duration: number): manifest is MediaPlaylist {
+  // Allow small rounding differences between renditions and skip shorter previews.
+  return manifest?.kind === 'media' && Math.abs(manifest.duration - duration) <= 1
+    && manifest.init.encryption.method === 'none' && manifest.segments.every((segment) => segment.encryption.method === 'none');
 }
 
 /** Called only by the explicit download action; never observes or starts playback. */
@@ -56,6 +46,34 @@ export async function downloadHlsTrack(
     const { bytes } = await readResource(url, 'manifest');
     checkCancelled();
     return parseHlsManifest(new TextDecoder('utf-8').decode(bytes), url);
+  }
+  async function findClearVariant(
+    variants: readonly HlsVariant[], observed: ReadonlyMap<string, HlsManifest>, duration: number,
+    masterUrl: string, trackPath: RegExp,
+  ) {
+    for (const variant of variants) {
+      const media = observed.get(variant.url);
+      if (isCompleteClearMedia(media, duration)) return { variant, media };
+    }
+
+    // Only probe listed public playlist URLs in this track's master directory.
+    const directory = new URL('.', masterUrl).pathname;
+    const inspected = new Set<string>();
+    for (const variant of variants) {
+      if (observed.has(variant.url) || inspected.has(variant.url)) continue;
+      const pathname = new URL(variant.url).pathname;
+      if (!pathname.startsWith(directory) || !trackPath.test(pathname) || !/\.m3u8$/i.test(pathname)) continue;
+      if (inspected.size >= maxCandidates) break;
+      inspected.add(variant.url);
+      try {
+        const media = await readManifest(variant.url);
+        if (isCompleteClearMedia(media, duration)) return { variant, media };
+      } catch (error) {
+        checkCancelled();
+        if (error instanceof HlsDownloadError && error.code === 'hls-too-large') throw error;
+      }
+    }
+    return null;
   }
   async function concurrent<T, R>(values: readonly T[], action: (value: T, index: number) => Promise<R>): Promise<R[]> {
     const result: R[] = new Array(values.length);
@@ -145,8 +163,9 @@ export async function downloadHlsTrack(
     });
     const masters = manifests.filter((entry) => entry.manifest.kind === 'master');
     if (masters.length > 1) throw new HlsDownloadError('hls-ambiguous');
-    const master = masters[0]?.manifest;
-    if (!master || master.kind !== 'master') throw new HlsDownloadError('hls-no-source');
+    const masterEntry = masters[0];
+    if (!masterEntry || masterEntry.manifest.kind !== 'master') throw new HlsDownloadError('hls-no-source');
+    const master = masterEntry.manifest;
     const variants = [...master.variants].sort((left, right) => {
       if (left.codec !== right.codec) return left.codec === 'aac' ? -1 : 1;
       return right.bandwidth - left.bandwidth || left.url.localeCompare(right.url);
@@ -170,7 +189,7 @@ export async function downloadHlsTrack(
       const canUseClearVariant = error.code === 'hls-wrapped-key'
         || (error.request.kind === 'http' && error.request.httpStatus === 400);
       if (!canUseClearVariant) throw error;
-      const alternative = findClearVariant(alternatives, observed, media.duration);
+      const alternative = await findClearVariant(alternatives, observed, media.duration, masterEntry.url, pattern);
       if (!alternative) throw error;
       media = alternative.media;
       parts.push(await readInit(media, alternative.variant));

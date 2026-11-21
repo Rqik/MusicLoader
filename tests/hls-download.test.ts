@@ -180,39 +180,44 @@ describe('user initiated HLS download service', () => {
     assert.equal(network.calls.some((call) => call.url.endsWith('.m4s')), false);
   });
 
-  it('saves a complete clear variant from the same master after the selected init key returns HTTP 400', async () => {
-    const network = fixture();
-    network.install();
-    const selected = `${root}aac/playlist.m3u8`;
-    const preview = `${root}preview/playlist.m3u8`;
-    const alternate = `${root}clear/playlist.m3u8`;
-    const keyUrl = `https://zvuk.com/keyserver/api/v1/key?track_id=${trackId}&quality=hq&content_type=track`;
-    network.resources.set(masterUrl, master([
-      { uri: 'aac/playlist.m3u8', bandwidth: 256000, codec: 'mp4a.40.2' },
-      { uri: 'preview/playlist.m3u8', bandwidth: 192000, codec: 'mp4a.40.2' },
-      { uri: 'clear/playlist.m3u8', bandwidth: 128000, codec: 'mp4a.40.2' },
-    ]));
-    network.resources.set(selected, media(2, [`#EXT-X-KEY:METHOD=AES-128,URI="${keyUrl}",IV=0x01`]));
-    network.resources.set(keyUrl, async () => new Response(null, { status: 400 }));
-    network.resources.set(preview, media(1));
-    network.resources.set(alternate, media(2));
-    const init = initialization();
-    const segments = [fragment(42), fragment(43)];
-    network.resources.set(`${root}clear/init.mp4`, init);
-    for (const [index, bytes] of segments.entries()) network.resources.set(`${root}clear/segment-${index}.m4s`, bytes);
+  for (const keyStatus of [400, 200]) {
+    it(`saves the complete clear variant when the selected init key returns HTTP ${keyStatus}`, async () => {
+      const network = fixture();
+      network.install();
+      const selected = `${root}aac/playlist.m3u8`;
+      const preview = `${root}preview/playlist.m3u8`;
+      const alternate = `${root}clear/playlist.m3u8`;
+      const keyUrl = `https://zvuk.com/keyserver/api/v1/key?track_id=${trackId}&quality=hq&content_type=track`;
+      network.resources.set(masterUrl, master([
+        { uri: 'aac/playlist.m3u8', bandwidth: 256000, codec: 'mp4a.40.2' },
+        { uri: 'preview/playlist.m3u8', bandwidth: 192000, codec: 'mp4a.40.2' },
+        { uri: 'clear/playlist.m3u8', bandwidth: 128000, codec: 'mp4a.40.2' },
+      ]));
+      network.resources.set(selected, media(2, [`#EXT-X-KEY:METHOD=AES-128,URI="${keyUrl}",IV=0x01`]));
+      network.resources.set(keyUrl, async () => new Response(keyStatus === 200 ? new Uint8Array(16) : null, { status: keyStatus }));
+      network.resources.set(preview, media(1));
+      network.resources.set(alternate, media(2));
+      const init = initialization();
+      const segments = [fragment(42), fragment(43)];
+      network.resources.set(`${root}clear/init.mp4`, init);
+      for (const [index, bytes] of segments.entries()) network.resources.set(`${root}clear/segment-${index}.m4s`, bytes);
 
-    const progress: number[] = [];
-    const blob = await network.download([masterUrl, selected, preview, alternate], trackId, new AbortController().signal,
-      (value) => progress.push(value));
-    assert.deepEqual(new Uint8Array(await blob.arrayBuffer()), concat(init, ...segments));
-    assert.equal(network.calls.filter(({ url }) => url === keyUrl).length, 1);
-    assert.deepEqual(network.calls.filter(({ url }) => url.endsWith('.m4s')).map(({ url }) => url), [
-      `${root}clear/segment-0.m4s`, `${root}clear/segment-1.m4s`,
-    ]);
-    assert.equal(network.calls.some(({ url }) => url === `${root}preview/init.mp4`), false);
-    assert.equal(progress.includes(15), true);
-    assert.equal(progress.at(-1), 99);
-  });
+      const progress: number[] = [];
+      const candidates = keyStatus === 200 ? [masterUrl] : [masterUrl, selected, preview, alternate];
+      const blob = await network.download(candidates, trackId, new AbortController().signal,
+        (value) => progress.push(value));
+      assert.deepEqual(new Uint8Array(await blob.arrayBuffer()), concat(init, ...segments));
+      assert.equal(network.calls.filter(({ url }) => url === keyUrl).length, 1);
+      assert.equal(network.calls.filter(({ url }) => url === alternate).length, 1);
+      assert.equal(network.calls.find(({ url }) => url === alternate)?.options.credentials, 'omit');
+      assert.deepEqual(network.calls.filter(({ url }) => url.endsWith('.m4s')).map(({ url }) => url), [
+        `${root}clear/segment-0.m4s`, `${root}clear/segment-1.m4s`,
+      ]);
+      assert.equal(network.calls.some(({ url }) => url === `${root}preview/init.mp4`), false);
+      assert.equal(progress.includes(15), true);
+      assert.equal(progress.at(-1), 99);
+    });
+  }
 
   it('keeps the key HTTP 400 failure when observed variants are encrypted or belong outside the master', async () => {
     const network = fixture();
@@ -221,11 +226,13 @@ describe('user initiated HLS download service', () => {
     const selected = `${root}aac/playlist.m3u8`;
     const partlyEncrypted = `${root}alternate/playlist.m3u8`;
     const unrelated = `${root}unrelated/playlist.m3u8`;
+    const otherTrack = `${root}../90001/playlist.m3u8`;
     const keyTag = `#EXT-X-KEY:METHOD=AES-128,URI="${keyUrl}",IV=0x01`;
     network.resources.set(masterUrl, master([
       { uri: 'aac/playlist.m3u8', bandwidth: 256000, codec: 'mp4a.40.2' },
       { uri: 'alternate/playlist.m3u8', bandwidth: 192000, codec: 'mp4a.40.2' },
       { uri: 'unobserved/playlist.m3u8', bandwidth: 128000, codec: 'mp4a.40.2' },
+      { uri: otherTrack, bandwidth: 64000, codec: 'mp4a.40.2' },
     ]));
     network.resources.set(selected, media(2, [keyTag]));
     network.resources.set(partlyEncrypted, media(2, ['#EXT-X-KEY:METHOD=NONE', keyTag]));
@@ -235,7 +242,8 @@ describe('user initiated HLS download service', () => {
     await assert.rejects(network.download([masterUrl, selected, partlyEncrypted, unrelated], trackId, new AbortController().signal, () => {}),
       requestFailure({ resource: 'key', kind: 'http', httpStatus: 400 }));
     assert.equal(network.calls.filter(({ url }) => url === keyUrl).length, 1);
-    assert.equal(network.calls.some(({ url }) => url.includes('/unobserved/') || url.endsWith('.m4s')), false);
+    assert.equal(network.calls.filter(({ url }) => url === `${root}unobserved/playlist.m3u8`).length, 1);
+    assert.equal(network.calls.some(({ url }) => url.includes('/90001/') || url.endsWith('.m4s')), false);
     assert.deepEqual(network.calls.filter(({ url }) => url.endsWith('/init.mp4')).map(({ url }) => url), [`${root}aac/init.mp4`]);
   });
 

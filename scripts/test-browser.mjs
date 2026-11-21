@@ -479,6 +479,8 @@ try {
     const iv = Buffer.alloc(16); iv.writeBigUInt64BE(BigInt(7 + index), 8); return encrypt(bytes, iv);
   });
   const masterText = '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=64780,CODECS="mp4a.40.29"\nlow.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=129451,CODECS="mp4a.40.2"\nmid.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=257479,CODECS="mp4a.40.2"\nhigh.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=945387,CODECS="fLaC"\nlossless.m3u8\n';
+  const singleVariantMaster = '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=257479,CODECS="mp4a.40.2"\nhigh.m3u8\n';
+  let hasAlternativeVariants = false;
   let useUnsupportedDrm = false;
   let slowHlsReply = false;
   let isInitDenied = false;
@@ -504,7 +506,9 @@ try {
     requestedResources.push(resource);
     await new Promise((resolve) => setTimeout(resolve, slowHlsReply && resource === 'high.m3u8' ? 10000 : 80));
     const headers = { 'access-control-allow-origin': '*' };
-    if (resource === 'master.m3u8') return route.fulfill({ headers, contentType: 'application/vnd.apple.mpegurl', body: masterText });
+    if (resource === 'master.m3u8') {
+      return route.fulfill({ headers, contentType: 'application/vnd.apple.mpegurl', body: hasAlternativeVariants ? masterText : singleVariantMaster });
+    }
     if (resource === 'high.m3u8') return route.fulfill({ headers, contentType: 'application/vnd.apple.mpegurl', body: mediaText() });
     if (resource === 'mid.m3u8') {
       const body = `#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXT-X-MAP:URI="clear-init.mp4"\n${clearSegments.map((_, index) => `#EXTINF:0.2,\nclear-part${index}.m4s`).join('\n')}\n#EXT-X-ENDLIST\n`;
@@ -576,10 +580,11 @@ try {
   assert.equal(keyRequests, 1, 'После отказа ключа автоматических повторов быть не должно');
   isKeyDenied = false;
   await popup.getByRole('button', { name: 'Скачать песню', exact: true }).click();
-  await expect(popup.getByText('Сервер принял запрос и вернул ключ в формате плеера Звука. Для сохранения звука используй «Записать звук вкладки».', { exact: true })).toBeVisible();
+  await expect(popup.getByText('Звук вернул ключ в формате своего плеера. Доступный открытый поток для скачивания не найден.', { exact: true })).toBeVisible();
   assert.equal(keyRequests, 2, 'Ответ в формате плеера не приводит к повторному запросу');
   assert.equal(await popup.evaluate(async () => (await chrome.downloads.search({})).length), 0);
 
+  hasAlternativeVariants = true;
   isZvukKeySelected = false;
   keyRequests = 0;
   await popup.getByRole('button', { name: 'Скачать песню', exact: true }).click();
@@ -638,8 +643,8 @@ try {
   await expect.poll(() => popup.evaluate(async () => (await chrome.downloads.search({ state: 'complete' })).length)).toBe(2);
   await stopJobSession.detach();
 
-  // Известный браузеру открытый вариант остаётся доступен при ответе ключевого сервера в формате плеера.
-  await hlsPage.evaluate(() => fetch('https://cdn-hls-slicer.zvuk.com/drm/track/t60001-fixture/mid.m3u8', { credentials: 'omit' }).then((response) => response.text()));
+  // Открытый вариант указан в master, но плеер ещё не запрашивал его плейлист.
+  assert.equal(requestedResources.includes('mid.m3u8'), false);
   isZvukKeySelected = true;
   const previousKeyRequests = keyRequests;
   const previousDownloadIds = await popup.evaluate(async () => (await chrome.downloads.search({ state: 'complete' })).map(({ id }) => id));
@@ -651,6 +656,7 @@ try {
   assert.ok(!path.relative(hlsDownloadDirectory, fallbackDownload.filename).startsWith('..'));
   assert.deepEqual(await readFile(fallbackDownload.filename), expectedAudioBytes);
   assert.equal(keyRequests, previousKeyRequests + 1, 'Ответ ключа в формате плеера не должен приводить к повторному запросу');
+  assert.equal(requestedResources.filter((resource) => resource === 'mid.m3u8').length, 1);
   assert.equal(requestedResources.filter((resource) => /^clear-part/.test(resource)).length, clearSegments.length);
   expectedDownloadCount = downloadCount;
   await hlsPage.close();

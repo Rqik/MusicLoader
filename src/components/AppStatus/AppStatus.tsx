@@ -1,18 +1,14 @@
-import { FlaskConical } from 'lucide-react';
-import { useExtensionConnection } from '@/shared/hooks/useExtensionConnection';
+import { usePlayerStore, selectCurrentSource } from '@/features/player/store/usePlayerStore';
 import './AppStatus.scss';
-
 export function AppStatus() {
-  const { status, page } = useExtensionConnection();
-  const label = status === 'preview' ? 'Предпросмотр' : status === 'checking' ? 'Проверяем связь…' : status === 'error' ? 'Нет связи с расширением' : page ? 'Связь со Звуком есть' : 'Расширение подключено';
-
+  const phase = usePlayerStore((state) => state.phase);
+  const source = usePlayerStore(selectCurrentSource);
+  const label = phase === 'preview' ? 'Предпросмотр' : phase === 'loading' ? 'Проверяем связь…'
+    : phase === 'error' || source?.connection === 'error' ? 'Ошибка связи' : !source ? 'Звук не открыт'
+    : source.connection === 'waiting' ? 'Обновите вкладку Звука' : 'Звук подключён';
   return (
     <footer className="app-status">
-      <div className="app-status__row">
-        <span className={`app-status__connection app-status__connection--${status}`} title={page ? `${page.title} · ${page.origin}` : label} role="status"><span className="app-status__dot" />{label}</span>
-        <span className="app-status__demo"><FlaskConical size={11} aria-hidden="true" />Демо-режим</span>
-      </div>
-      <p className="app-status__note">Без скачивания файлов · работает, пока окно открыто</p>
+      <span className={`app-status__connection app-status__connection--${source?.connection ?? phase}`} role="status"><span className="app-status__dot" aria-hidden="true" />{label}</span>
     </footer>
   );
 }

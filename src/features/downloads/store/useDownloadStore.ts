@@ -1,12 +1,12 @@
 import { create } from 'zustand';
 import { demoTracks } from '../../../shared/lib/demo-tracks';
-import type { Track } from '../../../shared/types/track';
+import type { DemoTrack } from '../../../shared/lib/demo-tracks';
 import type { DownloadStatus, DownloadTask } from '../types';
 
 interface DownloadState {
   tasks: DownloadTask[];
   isPaused: boolean;
-  addTask: (track: Track) => void;
+  addTask: (track: DemoTrack) => void;
   removeTask: (id: string) => void;
   updateProgress: (id: string, progress: number) => void;
   updateStatus: (id: string, status: DownloadStatus) => void;

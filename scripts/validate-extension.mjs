@@ -18,22 +18,37 @@ async function checkFile(relativePath) {
 
 assert.equal(manifest.manifest_version, 3);
 assert.match(manifest.version, /^\d+\.\d+\.\d+(\.\d+)?$/);
+const packageInfo = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+assert.equal(manifest.version, packageInfo.version, 'Версии package.json и manifest.json должны совпадать');
+const lockInfo = JSON.parse(await readFile(new URL('../package-lock.json', import.meta.url), 'utf8'));
+assert.equal(lockInfo.version, packageInfo.version, 'Корневая версия package-lock.json должна совпадать');
+assert.equal(lockInfo.packages[''].version, packageInfo.version, 'Версия пакета в lockfile должна совпадать');
 assert.equal(manifest.background.service_worker, 'background/background.js');
 assert.equal(manifest.action.default_popup, 'popup.html');
-assert.equal(manifest.background.type, undefined); // Оба скрипта — классические IIFE.
-assert.deepEqual(manifest.permissions ?? [], []);
-assert.deepEqual(manifest.host_permissions ?? [], []);
-assert.deepEqual(manifest.content_scripts[0].matches, ['https://*.zvuk.com/*']);
+assert.equal(manifest.background.type, undefined); // Служебные entry points — самостоятельные IIFE.
+assert.deepEqual(manifest.permissions, ['storage', 'downloads']);
+assert.deepEqual(manifest.host_permissions, ['https://*.zvuk.com/*']);
+assert.equal(manifest.content_scripts.length, 2);
+for (const entry of manifest.content_scripts) {
+  assert.deepEqual(entry.matches, ['https://*.zvuk.com/*']);
+  assert.equal(entry.run_at, 'document_start');
+}
+assert.deepEqual(manifest.content_scripts.map(({ world, js }) => ({ world, js })), [
+  { world: 'ISOLATED', js: ['content/content.js'] },
+  { world: 'MAIN', js: ['page/page.js'] },
+]);
 assert.equal(manifest.content_security_policy.extension_pages, "script-src 'self'; object-src 'self'");
 
-const html = await checkFile(manifest.action.default_popup);
-assert.doesNotMatch(html, /<script\b[^>]*>\s*[^<\s]/i, 'В popup обнаружен inline script');
-const assetPaths = [...html.matchAll(/<(?:script|link)\b[^>]*(?:src|href)="([^"]+)"/g)].map((match) => match[1]);
-assert.ok(assetPaths.some((asset) => asset.endsWith('.js')));
-assert.ok(assetPaths.some((asset) => asset.endsWith('.css')));
-for (const asset of assetPaths) {
-  assert.doesNotMatch(asset, /^(?:https?:)?\/\//, 'Удалённый ресурс в popup');
-  await checkFile(asset);
+for (const page of [manifest.action.default_popup, 'recorder.html']) {
+  const html = await checkFile(page);
+  assert.doesNotMatch(html, /<script\b[^>]*>\s*[^<\s]/i, `Inline script: ${page}`);
+  const assetPaths = [...html.matchAll(/<(?:script|link)\b[^>]*(?:src|href)="([^"]+)"/g)].map((match) => match[1]);
+  assert.ok(assetPaths.some((asset) => asset.endsWith('.js')), `JS: ${page}`);
+  assert.ok(assetPaths.some((asset) => asset.endsWith('.css')), `CSS: ${page}`);
+  for (const asset of assetPaths) {
+    assert.doesNotMatch(asset, /^(?:https?:)?\/\//, `Удалённый ресурс: ${page}`);
+    await checkFile(asset);
+  }
 }
 
 for (const scriptPath of [manifest.background.service_worker, ...manifest.content_scripts.flatMap((entry) => entry.js)]) {

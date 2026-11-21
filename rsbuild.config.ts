@@ -16,10 +16,19 @@ export default defineConfig(({ envMode, command }) => ({
     sourceMap: { js: envMode === 'development' ? 'source-map' : false, css: false },
   },
   environments: {
+    page: {
+      source: { entry: { page: './src/entrypoints/page/index.ts' } },
+      output: { distPath: { root: 'dist', js: 'page' } },
+      server: { publicDir: false },
+      splitChunks: false,
+      tools: { htmlPlugin: false, rspack: { optimization: { runtimeChunk: false } } },
+    },
     popup: {
-      source: { entry: { popup: './src/app/main.tsx' } },
+      source: { entry: { popup: './src/app/main.tsx', recorder: './src/entrypoints/recorder/main.tsx' } },
       plugins: [pluginReact(), pluginSass()],
-      html: { template: './src/app/popup.html', title: 'MusicLoader' },
+      html: {
+        template: ({ entryName }) => entryName === 'recorder' ? './src/entrypoints/recorder/recorder.html' : './src/app/popup.html',
+      },
       output: { distPath: { root: 'dist' } },
     },
     background: {

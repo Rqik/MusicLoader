@@ -1,0 +1,11 @@
+.track-download {
+  flex-shrink: 0;
+  &__header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+  &__title { margin: 0; font-size: 14px; font-weight: 600; line-height: 20px; }
+  &__actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; color: var(--secondary-foreground); }
+  &__note { margin: 8px 0 0; color: var(--secondary-foreground); font-size: 13px; line-height: 20px; }
+  &__progress { height: 4px; margin-top: 12px; }
+  &__spinner { animation: track-download-spin 1s linear infinite; }
+}
+@keyframes track-download-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .track-download__spinner { animation: none; } }

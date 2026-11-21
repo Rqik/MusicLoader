@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Pause, Play, Trash2 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -30,19 +29,19 @@ export function DownloadList() {
   return (
     <section className="download-list" aria-labelledby="queue-title">
       <div className="download-list__heading">
-        <h2 className="download-list__title" id="queue-title">Моя очередь <Badge variant="secondary" className="download-list__count">{total}</Badge></h2>
+        <h2 className="download-list__title" id="queue-title">Демоочередь</h2>
         <div className="download-list__actions">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="icon-sm" className="download-list__action" disabled={!hasActiveTasks && !isPaused} aria-label={isPaused ? 'Продолжить очередь' : 'Приостановить очередь'} onClick={togglePaused}>
-                {isPaused ? <Play size={14} /> : <Pause size={14} />}
+                {isPaused ? <Play aria-hidden="true" /> : <Pause aria-hidden="true" />}
               </Button>
             </TooltipTrigger>
             <TooltipContent>{isPaused ? 'Продолжить очередь' : 'Приостановить очередь'}</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-sm" className="download-list__action" disabled={completedCount === 0} aria-label="Очистить завершённые" onClick={clearCompleted}><Trash2 size={14} /></Button>
+              <Button variant="ghost" size="icon-sm" className="download-list__action" disabled={completedCount === 0} aria-label="Очистить завершённые" onClick={clearCompleted}><Trash2 aria-hidden="true" /></Button>
             </TooltipTrigger>
             <TooltipContent>Очистить завершённые</TooltipContent>
           </Tooltip>

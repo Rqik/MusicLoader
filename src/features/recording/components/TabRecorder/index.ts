@@ -1,0 +1,1 @@
+export { TabRecorder } from './TabRecorder';

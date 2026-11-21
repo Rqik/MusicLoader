@@ -1,4 +1,4 @@
-import type { Track } from '../types/track';
+export interface DemoTrack { id: string; title: string; artist: string; album: string; duration: string; artwork: string }
 
 // Вымышленные композиции: это данные интерфейса, а не каталог сервиса.
 export const demoTracks = [
@@ -6,4 +6,4 @@ export const demoTracks = [
   { id: 'after-rain', title: 'После дождя', artist: 'Северный берег', album: 'Вне времени', duration: '4:08', artwork: 'rain' },
   { id: 'quiet-city', title: 'Тихий город', artist: 'Линии', album: 'Наедине', duration: '2:56', artwork: 'city' },
   { id: 'own-wave', title: 'На своей волне', artist: 'Лето внутри', album: 'Без спешки', duration: '3:18', artwork: 'wave' },
-] as const satisfies readonly Track[];
+] as const satisfies readonly DemoTrack[];

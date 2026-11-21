@@ -1,8 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "MusicLoader — демо",
-  "version": "0.1.0",
-  "description": "Демонстрационная очередь загрузок. Без скачивания аудио и интеграции с API.",
+  "name": "MusicLoader",
+  "version": "0.3.1",
+  "description": "Текущий трек Звука, сохранение доступного аудиофайла и безопасная диагностика.",
+  "permissions": ["storage", "downloads"],
+  "host_permissions": ["https://*.zvuk.com/*"],
   "minimum_chrome_version": "120",
   "action": {
     "default_popup": "popup.html",
@@ -13,7 +15,14 @@
     {
       "matches": ["https://*.zvuk.com/*"],
       "js": ["content/content.js"],
-      "run_at": "document_idle"
+      "run_at": "document_start",
+      "world": "ISOLATED"
+    },
+    {
+      "matches": ["https://*.zvuk.com/*"],
+      "js": ["page/page.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
     }
   ],
   "content_security_policy": {

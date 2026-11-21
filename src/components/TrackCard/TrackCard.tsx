@@ -1,51 +1,44 @@
 import { useState } from 'react';
-import { Check, Clock3, Plus, SkipForward } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { ArrowUpRight, Music2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { demoTracks } from '@/shared/lib/demo-tracks';
-import { useDownloadStore } from '@/features/downloads/store/useDownloadStore';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { usePlayerStore, selectCurrentSource } from '@/features/player/store/usePlayerStore';
 import './TrackCard.scss';
 
 export function TrackCard() {
-  const [trackIndex, setTrackIndex] = useState(0);
-  const track = demoTracks[trackIndex] ?? demoTracks[0];
-  const addTask = useDownloadStore((state) => state.addTask);
-  const isAdded = useDownloadStore((state) => state.tasks.some((task) => task.id === track.id));
-
+  const source = usePlayerStore(selectCurrentSource);
+  const phase = usePlayerStore((state) => state.phase);
+  const [failedArtwork, setFailedArtwork] = useState<string | null>(null);
+  const track = source?.track;
+  const hasError = phase === 'error' || source?.connection === 'error';
+  const playbackLabel = source?.playbackState === 'playing' ? 'Воспроизводится'
+    : source?.playbackState === 'paused' ? 'Пауза' : null;
+  const emptyTitle = hasError ? 'Не удалось получить данные' : phase === 'loading' ? 'Подключаемся к плееру…'
+    : !source ? 'Откройте Звук' : 'Ожидание метаданных';
+  const emptyDescription = hasError ? 'Обновите вкладку Звука и откройте расширение снова.'
+    : phase === 'preview' ? 'Реальные данные доступны после установки расширения в Chrome.'
+    : source?.connection === 'waiting' ? 'Обновите вкладку Звука после установки расширения.' : 'Включите композицию на zvuk.com.';
   return (
     <Card className="track-card" aria-labelledby="current-track-title">
-      <div className="track-card__heading">
-        <span className="track-card__eyebrow"><span className="track-card__indicator" />ДЕМОТРЕК</span>
-        <span className="track-card__counter">0{trackIndex + 1}<span> / 0{demoTracks.length}</span></span>
-      </div>
-      <div className="track-card__track" aria-live="polite">
-        <img className="track-card__artwork" src={`./artwork/${track.artwork}.svg`} alt="" width={80} height={80} />
+      {track ? <CardHeader className="track-card__heading">
+        <span>Текущий трек</span>
+        {!hasError && playbackLabel ? <span>{playbackLabel}</span> : null}
+      </CardHeader> : null}
+      <CardContent className="track-card__track" aria-live="polite">
+        {track?.artwork && failedArtwork !== track.artwork
+          ? <img className="track-card__artwork" src={track.artwork} alt="Обложка альбома" width={96} height={96} referrerPolicy="no-referrer" onError={() => setFailedArtwork(track.artwork)} />
+          : track ? <span className="track-card__placeholder"><Music2 size={24} aria-hidden="true" /></span> : null}
         <div className="track-card__metadata">
-          <h2 className="track-card__title" id="current-track-title">{track.title}</h2>
-          <p className="track-card__artist">{track.artist}</p>
-          <p className="track-card__album">{track.album}</p>
-          <div className="track-card__tags">
-            <Badge variant="secondary" className="track-card__badge">DEMO</Badge>
-            <span className="track-card__duration"><Clock3 size={11} aria-hidden="true" />{track.duration}</span>
-          </div>
+          <CardTitle className="track-card__title" id="current-track-title" role="heading" aria-level={2}>{hasError ? emptyTitle : track?.title ?? emptyTitle}</CardTitle>
+          <p className="track-card__artist">{track ? track.artist || 'Исполнитель не указан' : emptyDescription}</p>
+          {track ? <p className="track-card__album">{track.album ?? 'Альбом не указан'}</p> : null}
         </div>
-      </div>
-      <div className="track-card__actions">
-        <Button className="track-card__add" disabled={isAdded} onClick={() => addTask(track)}>
-          {isAdded ? <Check size={16} /> : <Plus size={17} />}
-          {isAdded ? 'Добавлено в очередь' : 'Добавить в очередь'}
-        </Button>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button className="track-card__next" variant="secondary" size="icon" aria-label="Следующий демотрек" onClick={() => setTrackIndex((index) => (index + 1) % demoTracks.length)}>
-              <SkipForward size={17} />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Следующий демотрек</TooltipContent>
-        </Tooltip>
-      </div>
+      </CardContent>
+      <CardFooter className="track-card__actions">
+        {track?.url ? <Button variant="link" className="track-card__link" size="sm" asChild><a href={track.url} target="_blank" rel="noreferrer">Открыть композицию <ArrowUpRight aria-hidden="true" /></a></Button>
+          : !track ? <Button size="sm" asChild><a href="https://zvuk.com/" target="_blank" rel="noreferrer">Открыть Звук <ArrowUpRight aria-hidden="true" /></a></Button>
+          : <span className="track-card__note">ID и ссылка не определены однозначно</span>}
+      </CardFooter>
     </Card>
   );
 }

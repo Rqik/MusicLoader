@@ -1,8 +1,8 @@
-import type { Track } from '../../shared/types/track';
+import type { DemoTrack } from '../../shared/lib/demo-tracks';
 
 export type DownloadStatus = 'pending' | 'downloading' | 'completed' | 'error';
 
-export interface DownloadTask extends Track {
+export interface DownloadTask extends DemoTrack {
   progress: number;
   status: DownloadStatus;
   attempts: number;

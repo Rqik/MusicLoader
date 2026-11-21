@@ -1,24 +1,23 @@
 .app-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 16px 22px;
+  gap: 8px;
+  padding: 12px var(--popup-gutter);
 
-  &__brand { display: flex; align-items: center; gap: 11px; }
+  &__brand { display: flex; flex: 1; align-items: center; gap: 8px; }
   &__logo {
     display: grid;
     place-items: center;
-    width: 39px;
-    height: 39px;
-    border-radius: 12px;
-    background: var(--primary);
-    color: var(--primary-foreground);
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: var(--secondary);
+    color: var(--secondary-foreground);
   }
-  &__title { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -0.7px; line-height: 1.2; }
-  &__dot { color: var(--primary); }
-  &__caption { margin: 5px 0 0; color: var(--muted-foreground); font-size: 10px; letter-spacing: 0.3px; }
+  &__title { margin: 0; font-size: 16px; font-weight: 600; line-height: 24px; }
+  &__caption { color: var(--muted-foreground); font-size: 12px; }
   &__info { color: var(--muted-foreground); }
-  &__dialog { width: min(370px, calc(100vw - 32px)); padding: 24px; gap: 20px; }
-  &__details { display: grid; gap: 12px; color: var(--muted-foreground); font-size: 12px; line-height: 1.7; }
-  &__version { color: var(--muted-foreground); font-size: 10px; text-align: center; }
+  &__dialog { width: min(368px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; padding: 20px; gap: 16px; }
+  &__dialog-heading { padding-right: 24px; text-align: left; }
+  &__details { display: grid; gap: 8px; color: var(--secondary-foreground); font-size: 13px; line-height: 20px; }
 }
